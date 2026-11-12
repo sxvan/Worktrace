@@ -34,6 +34,9 @@ public sealed class CaptureConfig
 
     public int ImageQuality { get; set; } = 40;
 
+    /// <summary>AVIF encoder effort: 0 gives the smallest files, 9 is the fastest.</summary>
+    public int ImageEncoderSpeed { get; set; } = 8;
+
     /// <summary>Maximum dHash Hamming distance at which two composites count as the same image.</summary>
     public int DedupeThreshold { get; set; } = 4;
 }

@@ -32,7 +32,8 @@ if (args.Length > 0 && args[0] == "--dump")
     using var readDb = new CaptureDatabase(paths.DatabaseFile);
     var lines = readDb.ReadLastEvents(count)
         .Select(e => (e.Timestamp, Text: $"{e.Type.ToDbName(),-12}  {e.ProcessName,-20}  {e.WindowTitle}"))
-        .Concat(readDb.ReadLastCaptureDecisions(count).Select(d => (d.Timestamp, Text: $">> capture    {d.Trigger}")))
+        .Concat(readDb.ReadLastCaptures(count).Select(c =>
+            (c.Timestamp, Text: $">> capture    {c.Trigger,-13} {c.Windows} window(s), {c.SavedImages} saved")))
         .OrderBy(line => line.Timestamp)
         .TakeLast(count);
     foreach (var (timestamp, text) in lines)
@@ -96,13 +97,36 @@ try
         Console.WriteLine("Note: borderless capture was denied; captured windows will show a border.");
     }
 
+    // Retention: on startup and once per day.
+    var retention = new RetentionCleaner(paths.Root, database, config.RetentionDays);
+    using var retentionTimer = new Timer(_ =>
+    {
+        try
+        {
+            int removed = retention.Run(DateOnly.FromDateTime(DateTime.Now));
+            if (removed > 0)
+            {
+                Log.Information("Retention removed {Folders} day folder(s)", removed);
+            }
+        }
+        catch (Exception ex)
+        {
+            Log.Error("Retention failed: {ErrorType} 0x{HResult:X8}", ex.GetType().Name, ex.HResult);
+        }
+    }, null, TimeSpan.Zero, TimeSpan.FromDays(1));
+
+    using var pipeline = new CapturePipeline(
+        new PassThroughRedactor(),
+        new FileImageStore(paths.Root, config.ImageQuality, Math.Clamp(config.ImageEncoderSpeed, 0, 9)),
+        database,
+        config.DedupeThreshold);
+
     var coordinator = new CaptureCoordinator(
         tracker,
         new CaptureTriggerEngine(TriggerSettings.FromConfig(config)),
         database,
         capturer,
-        new PassThroughRedactor(),
-        new FileImageStore(paths.Root, config.ImageQuality),
+        pipeline,
         TimeProvider.System);
     Console.WriteLine($"Captures: {paths.CapturesFolder}");
     await coordinator.RunAsync(signals.Reader, shutdown.Token);

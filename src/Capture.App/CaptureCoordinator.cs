@@ -1,29 +1,26 @@
 using System.Diagnostics;
 using System.Threading.Channels;
 using Capture.Core.Monitoring;
-using ActivityEvent = Capture.Core.Monitoring.ActivityEvent;
 using Capture.Core.Pipeline;
 using Capture.Core.Triggers;
 using Capture.Storage;
 using Capture.Windows;
 using Serilog;
+using ActivityEvent = Capture.Core.Monitoring.ActivityEvent;
 
 namespace Capture.App;
 
 /// <summary>
-/// The single consumer of monitor signals: stores events, drives the trigger engine and runs the
-/// capture pipeline on its decisions. Runs off the monitor thread so slow work never blocks
-/// event handling.
-///
-///   capture windows -> composite per monitor -> IRedactor -> (dedupe, M4) -> encode -> IImageStore
+/// The single consumer of monitor signals: stores events, drives the trigger engine, captures on
+/// its decisions and hands the result to the <see cref="CapturePipeline"/>. Runs off the monitor
+/// thread, and leaves encoding to the pipeline thread, so event handling is never held up.
 /// </summary>
 public sealed class CaptureCoordinator(
     ActivityTracker tracker,
     CaptureTriggerEngine triggers,
     CaptureDatabase database,
     ScreenCapturer capturer,
-    IRedactor redactor,
-    IImageStore imageStore,
+    CapturePipeline pipeline,
     TimeProvider time)
 {
     private bool _lastCaptureFoundNothing;
@@ -40,7 +37,6 @@ public sealed class CaptureCoordinator(
 
             if (triggers.Poll(time.GetUtcNow()) is { } decision)
             {
-                database.InsertCaptureDecision(decision);
                 try
                 {
                     await CaptureAsync(decision, shutdown);
@@ -52,7 +48,7 @@ public sealed class CaptureCoordinator(
                 {
                     // Fail closed: whatever went wrong, this capture is gone and nothing was saved.
                     Log.Error("Capture failed: {ErrorType} 0x{HResult:X8}", ex.GetType().Name, ex.HResult);
-                    Console.WriteLine($"{decision.Timestamp.ToLocalTime():HH:mm:ss}  >> capture   {decision.Trigger.ToDbName()}  -> failed ({ex.GetType().Name})");
+                    Console.WriteLine($"{CapturePipeline.Prefix(decision)} -> failed ({ex.GetType().Name})");
                 }
             }
         }
@@ -60,13 +56,10 @@ public sealed class CaptureCoordinator(
 
     private async Task CaptureAsync(CaptureDecision decision, CancellationToken shutdown)
     {
-        string prefix = $"{decision.Timestamp.ToLocalTime():HH:mm:ss}  >> capture   {decision.Trigger.ToDbName(),-13}";
-
         // Later milestone: skip here while the focused element is a password field (UI Automation IsPassword).
 
         var stopwatch = Stopwatch.StartNew();
         CaptureResult result = await capturer.CaptureAsync(decision.Timestamp, shutdown);
-        long captureMs = stopwatch.ElapsedMilliseconds;
 
         switch (result.Outcome)
         {
@@ -77,45 +70,19 @@ public sealed class CaptureCoordinator(
                     database.InsertEvent(new ActivityEvent(decision.Timestamp, EventType.NonWork));
                 }
                 Log.Information("Capture ({Trigger}): no allowed window visible", decision.Trigger.ToDbName());
-                Console.WriteLine($"{prefix} -> nothing to capture (no allowed window visible)");
-                return;
+                Console.WriteLine($"{CapturePipeline.Prefix(decision)} -> nothing to capture (no allowed window visible)");
+                break;
 
             case CaptureOutcome.Discarded:
                 Log.Warning("Capture ({Trigger}) discarded: {Reason}", decision.Trigger.ToDbName(), result.Reason);
-                Console.WriteLine($"{prefix} -> discarded ({result.Reason})");
-                return;
-        }
+                Console.WriteLine($"{CapturePipeline.Prefix(decision)} -> discarded ({result.Reason})");
+                break;
 
-        _lastCaptureFoundNothing = false;
-        int saved = 0;
-        try
-        {
-            foreach (RawComposite composite in result.Composites)
-            {
-                RedactionResult redaction = await redactor.RedactAsync(composite, shutdown);
-                if (redaction.Composite is null)
-                {
-                    Log.Information("Frame dropped by redaction: {Reason}", redaction.DropReason);
-                    continue;
-                }
-
-                using RedactedComposite redacted = redaction.Composite;
-                await imageStore.SaveAsync(redacted, shutdown);
-                saved++;
-            }
+            case CaptureOutcome.Captured:
+                _lastCaptureFoundNothing = false;
+                pipeline.Enqueue(decision, result, stopwatch.ElapsedMilliseconds);
+                break;
         }
-        finally
-        {
-            foreach (RawComposite composite in result.Composites)
-            {
-                composite.Dispose();
-            }
-        }
-
-        long totalMs = stopwatch.ElapsedMilliseconds;
-        Log.Information("Capture ({Trigger}): {Saved} image(s), capture {CaptureMs} ms, encode {EncodeMs} ms",
-            decision.Trigger.ToDbName(), saved, captureMs, totalMs - captureMs);
-        Console.WriteLine($"{prefix} -> {saved} image(s), capture {captureMs} ms, encode {totalMs - captureMs} ms");
     }
 
     private void Handle(MonitorSignal signal)

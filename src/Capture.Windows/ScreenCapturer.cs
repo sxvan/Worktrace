@@ -14,9 +14,10 @@ using WinRT;
 namespace Capture.Windows;
 
 /// <summary>
-/// Captures the allowed windows, each through its own Windows.Graphics.Capture session, and builds
-/// one composite per monitor. Pixels of non-allowed windows never enter this process: only allowed
-/// windows are ever handed to the capture API.
+/// Captures the allowed windows, each through its own Windows.Graphics.Capture session, and returns
+/// one image per window with the parts that were covered on screen blacked out. Pixels of
+/// non-allowed windows never enter this process: only allowed windows are ever handed to the
+/// capture API.
 ///
 /// Fails closed: any error, or a window layout that changed while capturing, discards everything.
 /// </summary>
@@ -54,7 +55,7 @@ public sealed class ScreenCapturer
 
     /// <summary>
     /// Takes one capture. On a layout mismatch it retries once after 500 ms, then gives up.
-    /// The caller owns the returned composites and must dispose them.
+    /// The caller owns the returned images and must dispose them.
     /// </summary>
     public async Task<CaptureResult> CaptureAsync(DateTimeOffset timestamp, CancellationToken cancellationToken)
     {
@@ -98,50 +99,66 @@ public sealed class ScreenCapturer
             return CaptureResult.NoAllowedWindow;
         }
 
-        WindowFrame[] frames = [];
-        var composites = new List<RawComposite>();
+        Task<WindowFrame>[] captures = before.Windows.Select(p => CaptureWindowAsync(p.Window, cancellationToken)).ToArray();
+        var images = new List<RawWindowImage>();
+        var handedOver = new HashSet<byte[]>(ReferenceEqualityComparer.Instance);
         bool success = false;
         try
         {
-            frames = await Task.WhenAll(before.WindowsToCapture.Select(w => CaptureWindowAsync(w, cancellationToken)));
-            var frameByHandle = frames.ToDictionary(f => f.Window.Handle);
+            // Waits for every capture to finish, also when one of them fails.
+            WindowFrame[] frames = await Task.WhenAll(captures);
 
-            foreach (MonitorPlan monitor in before.Monitors)
+            for (int i = 0; i < frames.Length; i++)
             {
-                RectInt bounds = monitor.Monitor.Bounds;
-                byte[] canvas = new byte[checked(bounds.Width * bounds.Height * Compositor.BytesPerPixel)];
-                var composite = new RawComposite(timestamp, monitor.Monitor, bounds.Width, bounds.Height, canvas, monitor.Windows);
-                composites.Add(composite);
+                WindowPlacement placement = before.Windows[i];
+                WindowFrame frame = frames[i];
+                RectInt bounds = placement.Window.Bounds;
 
-                foreach (WindowPlacement placement in monitor.Windows)
+                byte[] pixels;
+                bool fullyVisible = placement.VisibleRects.Count == 1 && placement.VisibleRects[0] == bounds;
+                if (fullyVisible && frame.Width == bounds.Width && frame.Height == bounds.Height)
                 {
-                    WindowFrame frame = frameByHandle[placement.Window.Handle];
-                    Compositor.Blit(canvas, bounds, frame.Pixels, frame.Width, frame.Height, frame.Origin, placement.VisibleRects);
+                    // Nothing to mask: the frame is the image.
+                    pixels = frame.Pixels;
+                    handedOver.Add(pixels);
                 }
+                else
+                {
+                    // Black canvas in the window's size; only the visible parts are drawn onto it.
+                    pixels = new byte[checked(bounds.Width * bounds.Height * Compositor.BytesPerPixel)];
+                    Compositor.Blit(pixels, bounds, frame.Pixels, frame.Width, frame.Height, frame.Origin, placement.VisibleRects);
+                }
+                images.Add(new RawWindowImage(timestamp, placement, bounds.Width, bounds.Height, pixels));
             }
 
             // Anything that moved, resized, changed z-order, appeared or disappeared meanwhile
-            // makes the composite untrustworthy.
+            // makes the images untrustworthy.
             CapturePlan after = ReadPlan();
             if (!before.HasSameLayoutAs(after))
             {
                 return null;
             }
 
+            long foreground = (long)(nint)global::Windows.Win32.PInvoke.GetForegroundWindow();
+            long? focused = before.Windows.Any(p => p.Window.Handle == foreground) ? foreground : null;
+
             success = true;
-            return new CaptureResult(CaptureOutcome.Captured, composites);
+            return new CaptureResult(CaptureOutcome.Captured, images, before.Monitors, focused);
         }
         finally
         {
-            foreach (WindowFrame frame in frames)
+            foreach (Task<WindowFrame> capture in captures)
             {
-                Array.Clear(frame.Pixels);
+                if (capture.IsCompletedSuccessfully && !(success && handedOver.Contains(capture.Result.Pixels)))
+                {
+                    Array.Clear(capture.Result.Pixels);
+                }
             }
             if (!success)
             {
-                foreach (RawComposite composite in composites)
+                foreach (RawWindowImage image in images)
                 {
-                    composite.Dispose();
+                    image.Dispose();
                 }
             }
         }
