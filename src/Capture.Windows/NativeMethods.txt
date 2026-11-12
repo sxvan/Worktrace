@@ -8,3 +8,17 @@ GetLastInputInfo
 WTSRegisterSessionNotification
 WTSUnRegisterSessionNotification
 PostMessage
+EnumWindows
+IsWindowVisible
+IsIconic
+GetWindow
+GetWindowRect
+GetWindowLong
+DwmGetWindowAttribute
+EnumDisplayMonitors
+GetMonitorInfo
+MONITORINFOEXW
+GetDpiForMonitor
+OpenProcess
+QueryFullProcessImageName
+CloseHandle

@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using System.Windows.Forms;
 using Capture.Core.Allowlist;
 using Capture.Core.Monitoring;
@@ -156,7 +155,7 @@ public sealed class WindowActivityMonitor : IDisposable
     private void HandleForeground(HWND hwnd)
     {
         _foreground = hwnd;
-        uint processId = GetProcessId(hwnd);
+        uint processId = DesktopInspector.GetProcessId(hwnd);
         WindowSnapshot snapshot = Describe(hwnd, processId, out _foregroundHasRule);
 
         // Title changes only matter for processes that have an allowlist rule, so the name-change
@@ -175,7 +174,7 @@ public sealed class WindowActivityMonitor : IDisposable
 
     private void HandleTitleChange(HWND hwnd)
     {
-        WindowSnapshot snapshot = Describe(hwnd, GetProcessId(hwnd), out _);
+        WindowSnapshot snapshot = Describe(hwnd, DesktopInspector.GetProcessId(hwnd), out _);
         if (snapshot == _lastSnapshot)
         {
             return;
@@ -196,14 +195,14 @@ public sealed class WindowActivityMonitor : IDisposable
             return WindowSnapshot.NonWork;
         }
 
-        string? processName = GetProcessName(processId);
+        string? processName = DesktopInspector.GetProcessName(processId);
         if (processName is null || !_allowlist.HasRuleFor(processName))
         {
             return WindowSnapshot.NonWork;
         }
 
         hasRule = true;
-        string title = GetTitle(hwnd);
+        string title = DesktopInspector.GetTitle(hwnd);
         return _allowlist.IsAllowed(processName, title)
             ? WindowSnapshot.Allowed((long)(nint)hwnd, processName, title)
             : WindowSnapshot.NonWork;
@@ -268,45 +267,6 @@ public sealed class WindowActivityMonitor : IDisposable
         catch (Exception ex)
         {
             _onError(ex);
-        }
-    }
-
-    private static unsafe uint GetProcessId(HWND hwnd)
-    {
-        if (hwnd == default)
-        {
-            return 0;
-        }
-        uint processId = 0;
-        PInvoke.GetWindowThreadProcessId(hwnd, &processId);
-        return processId;
-    }
-
-    private static string? GetProcessName(uint processId)
-    {
-        try
-        {
-            using var process = Process.GetProcessById((int)processId);
-            return process.ProcessName + ".exe";
-        }
-        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException or System.ComponentModel.Win32Exception)
-        {
-            return null; // process already gone or not accessible: treat as not allowed
-        }
-    }
-
-    private static unsafe string GetTitle(HWND hwnd)
-    {
-        int length = PInvoke.GetWindowTextLength(hwnd);
-        if (length <= 0)
-        {
-            return "";
-        }
-        char[] buffer = new char[length + 1];
-        fixed (char* p = buffer)
-        {
-            int copied = PInvoke.GetWindowText(hwnd, p, buffer.Length);
-            return copied > 0 ? new string(p, 0, copied) : "";
         }
     }
 

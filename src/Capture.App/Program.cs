@@ -8,6 +8,7 @@ using Capture.App;
 using Capture.Core.Allowlist;
 using Capture.Core.Config;
 using Capture.Core.Monitoring;
+using Capture.Core.Pipeline;
 using Capture.Core.Triggers;
 using Capture.Storage;
 using Capture.Windows;
@@ -87,8 +88,23 @@ try
     Console.WriteLine($"Monitoring. Database: {paths.DatabaseFile}");
     Console.WriteLine("Press Ctrl+C to stop.");
 
+    var capturer = new ScreenCapturer(allowlist);
+    await capturer.InitializeAsync();
+    if (!capturer.IsBorderless)
+    {
+        Log.Warning("Borderless capture was denied; captured windows will show a border on screen");
+        Console.WriteLine("Note: borderless capture was denied; captured windows will show a border.");
+    }
+
     var coordinator = new CaptureCoordinator(
-        tracker, new CaptureTriggerEngine(TriggerSettings.FromConfig(config)), database, TimeProvider.System);
+        tracker,
+        new CaptureTriggerEngine(TriggerSettings.FromConfig(config)),
+        database,
+        capturer,
+        new PassThroughRedactor(),
+        new FileImageStore(paths.Root, config.ImageQuality),
+        TimeProvider.System);
+    Console.WriteLine($"Captures: {paths.CapturesFolder}");
     await coordinator.RunAsync(signals.Reader, shutdown.Token);
 
     Log.Information("Stopping");
