@@ -1,5 +1,6 @@
 using System.Globalization;
 using Capture.Core.Monitoring;
+using Capture.Core.Triggers;
 using Microsoft.Data.Sqlite;
 
 namespace Capture.Storage;
@@ -38,6 +39,13 @@ public sealed class CaptureDatabase : IDisposable
                 window_handle INTEGER          -- null unless the window is allowed
             );
             CREATE INDEX IF NOT EXISTS ix_events_timestamp ON events(timestamp);
+
+            -- M2 only: "would capture now" decisions. Replaced by the captures table in M4.
+            CREATE TABLE IF NOT EXISTS capture_decisions (
+                id        INTEGER PRIMARY KEY,
+                timestamp TEXT NOT NULL,       -- UTC, ISO 8601
+                trigger   TEXT NOT NULL
+            );
             PRAGMA user_version=1;
             """);
 
@@ -83,6 +91,34 @@ public sealed class CaptureDatabase : IDisposable
                 reader.IsDBNull(2) ? null : reader.GetString(2),
                 reader.IsDBNull(3) ? null : reader.GetString(3),
                 reader.IsDBNull(4) ? null : reader.GetInt64(4)));
+        }
+        result.Reverse();
+        return result;
+    }
+
+    public void InsertCaptureDecision(CaptureDecision decision)
+    {
+        using SqliteCommand command = _connection.CreateCommand();
+        command.CommandText = "INSERT INTO capture_decisions (timestamp, trigger) VALUES ($timestamp, $trigger);";
+        command.Parameters.AddWithValue("$timestamp", decision.Timestamp.UtcDateTime.ToString(TimestampFormat, CultureInfo.InvariantCulture));
+        command.Parameters.AddWithValue("$trigger", decision.Trigger.ToDbName());
+        command.ExecuteNonQuery();
+    }
+
+    /// <summary>The most recent capture decisions as (timestamp, trigger name), oldest first.</summary>
+    public IReadOnlyList<(DateTimeOffset Timestamp, string Trigger)> ReadLastCaptureDecisions(int count)
+    {
+        using SqliteCommand command = _connection.CreateCommand();
+        command.CommandText = "SELECT timestamp, trigger FROM capture_decisions ORDER BY id DESC LIMIT $count;";
+        command.Parameters.AddWithValue("$count", count);
+
+        var result = new List<(DateTimeOffset, string)>();
+        using SqliteDataReader reader = command.ExecuteReader();
+        while (reader.Read())
+        {
+            result.Add((
+                DateTimeOffset.ParseExact(reader.GetString(0), TimestampFormat, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal),
+                reader.GetString(1)));
         }
         result.Reverse();
         return result;

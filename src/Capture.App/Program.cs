@@ -8,6 +8,7 @@ using Capture.App;
 using Capture.Core.Allowlist;
 using Capture.Core.Config;
 using Capture.Core.Monitoring;
+using Capture.Core.Triggers;
 using Capture.Storage;
 using Capture.Windows;
 using Serilog;
@@ -28,9 +29,14 @@ if (args.Length > 0 && args[0] == "--dump")
 {
     int count = args.Length > 1 && int.TryParse(args[1], out int n) ? n : 50;
     using var readDb = new CaptureDatabase(paths.DatabaseFile);
-    foreach (ActivityEvent e in readDb.ReadLastEvents(count))
+    var lines = readDb.ReadLastEvents(count)
+        .Select(e => (e.Timestamp, Text: $"{e.Type.ToDbName(),-12}  {e.ProcessName,-20}  {e.WindowTitle}"))
+        .Concat(readDb.ReadLastCaptureDecisions(count).Select(d => (d.Timestamp, Text: $">> capture    {d.Trigger}")))
+        .OrderBy(line => line.Timestamp)
+        .TakeLast(count);
+    foreach (var (timestamp, text) in lines)
     {
-        Console.WriteLine($"{e.Timestamp.ToLocalTime():yyyy-MM-dd HH:mm:ss}  {e.Type.ToDbName(),-12}  {e.ProcessName,-20}  {e.WindowTitle}");
+        Console.WriteLine($"{timestamp.ToLocalTime():yyyy-MM-dd HH:mm:ss}  {text}");
     }
     return 0;
 }
@@ -81,21 +87,9 @@ try
     Console.WriteLine($"Monitoring. Database: {paths.DatabaseFile}");
     Console.WriteLine("Press Ctrl+C to stop.");
 
-    try
-    {
-        await foreach (MonitorSignal signal in signals.Reader.ReadAllAsync(shutdown.Token))
-        {
-            foreach (ActivityEvent e in tracker.Process(signal))
-            {
-                database.InsertEvent(e);
-                Log.Information("Event {Type}", e.Type.ToDbName());
-                Console.WriteLine($"{e.Timestamp.ToLocalTime():HH:mm:ss}  {e.Type.ToDbName(),-12}  {e.ProcessName}");
-            }
-        }
-    }
-    catch (OperationCanceledException)
-    {
-    }
+    var coordinator = new CaptureCoordinator(
+        tracker, new CaptureTriggerEngine(TriggerSettings.FromConfig(config)), database, TimeProvider.System);
+    await coordinator.RunAsync(signals.Reader, shutdown.Token);
 
     Log.Information("Stopping");
     return 0;
