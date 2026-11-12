@@ -158,7 +158,8 @@ public class CaptureTriggerEngineTests
 
         Assert.Equal(At(6), engine.NextDue);
         Assert.Null(engine.Poll(At(5.9)));
-        Assert.Equal(new CaptureDecision(At(6), TriggerType.TypingPause), engine.Poll(At(6)));
+        // The window switch takes over the label of the coalesced capture.
+        Assert.Equal(new CaptureDecision(At(6), TriggerType.WindowSwitch), engine.Poll(At(6)));
         Assert.Null(engine.Poll(At(6.1)));
         Assert.Equal(At(66), engine.NextDue);
     }

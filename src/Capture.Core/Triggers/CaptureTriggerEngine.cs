@@ -35,7 +35,10 @@ public sealed record TriggerSettings(
         TimeSpan.FromSeconds(config.IdleTimeoutSeconds));
 }
 
-/// <summary>A capture should be taken now. <see cref="Trigger"/> is the first trigger that asked for it.</summary>
+/// <summary>
+/// A capture should be taken now. If several triggers were coalesced, <see cref="Trigger"/> is
+/// the window switch if there was one, otherwise the first trigger that asked.
+/// </summary>
 public sealed record CaptureDecision(DateTimeOffset Timestamp, TriggerType Trigger);
 
 /// <summary>
@@ -187,8 +190,13 @@ public sealed class CaptureTriggerEngine(TriggerSettings settings)
         }
         else if (trigger == TriggerType.WindowSwitch)
         {
-            // Give the newest window time to draw.
-            _pending = _pending with { Due = Min(Max(_pending.Due, due), _pending.Latest) };
+            // Give the newest window time to draw. A window switch is the more telling reason, so it
+            // takes over the label of a coalesced capture.
+            _pending = _pending with
+            {
+                Trigger = TriggerType.WindowSwitch,
+                Due = Min(Max(_pending.Due, due), _pending.Latest),
+            };
         }
     }
 
