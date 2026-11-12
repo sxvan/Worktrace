@@ -45,17 +45,19 @@ public sealed class PassThroughRedactor : IRedactor
     }
 }
 
+/// <param name="RelativePath">File path relative to the storage root.</param>
+/// <param name="Width">Width of the saved file in pixels, which can be smaller than the window.</param>
+public sealed record SavedImage(string RelativePath, int Width, int Height);
+
 /// <summary>
 /// The only way image data reaches the disk. Accepts nothing but redacted images.
 /// Encryption at rest will be added behind this interface.
 /// </summary>
 public interface IImageStore
 {
-    /// <summary>
-    /// Encodes and saves the image. Returns the file path relative to the storage root.
-    /// </summary>
+    /// <summary>Encodes and saves the image, possibly scaled down.</summary>
     /// <param name="sequence">Position of the window within its capture, 1 = topmost. Part of the file name.</param>
-    string Save(RedactedWindowImage image, int sequence);
+    SavedImage Save(RedactedWindowImage image, int sequence);
 
     /// <summary>Removes a file written by <see cref="Save"/>. Missing files are ignored.</summary>
     void Delete(string relativePath);

@@ -117,7 +117,7 @@ try
 
     using var pipeline = new CapturePipeline(
         new PassThroughRedactor(),
-        new FileImageStore(paths.Root, config.ImageQuality, Math.Clamp(config.ImageEncoderSpeed, 0, 9)),
+        new FileImageStore(paths.Root, config.ImageQuality, Math.Clamp(config.ImageEncoderSpeed, 0, 9), config.MaxImageDimension),
         database,
         config.DedupeThreshold);
 

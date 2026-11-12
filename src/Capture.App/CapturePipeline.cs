@@ -117,6 +117,7 @@ public sealed class CapturePipeline : IDisposable
         var stopwatch = Stopwatch.StartNew();
         var records = new List<CapturedWindowRecord>();
         var writtenFiles = new List<string>();
+        var windowSizes = new List<(int Width, int Height)>();
         DateOnly day = DateOnly.FromDateTime(job.Decision.Timestamp.LocalDateTime);
 
         try
@@ -137,16 +138,18 @@ public sealed class CapturePipeline : IDisposable
                 ulong hash = DHash.Compute(image.Pixels, image.Width, image.Height);
                 long? duplicateOf = _deduplicator.FindDuplicate(handle, image.Width, image.Height, hash, day);
 
-                string? path = null;
+                SavedImage? saved = null;
                 if (duplicateOf is null)
                 {
-                    path = _imageStore.Save(image, sequence);
-                    writtenFiles.Add(path);
+                    saved = _imageStore.Save(image, sequence);
+                    writtenFiles.Add(saved.RelativePath);
                 }
 
+                // Width and height describe the saved file; for a duplicate, the window's own size.
                 records.Add(new CapturedWindowRecord(
                     image.Placement, handle == job.Capture.FocusedWindowHandle,
-                    image.Width, image.Height, hash, path, duplicateOf));
+                    saved?.Width ?? image.Width, saved?.Height ?? image.Height, hash, saved?.RelativePath, duplicateOf));
+                windowSizes.Add((image.Width, image.Height));
             }
 
             if (records.Count == 0)
@@ -162,7 +165,7 @@ public sealed class CapturePipeline : IDisposable
                 if (records[i].FilePath is not null)
                 {
                     _deduplicator.Remember(
-                        records[i].Placement.Window.Handle, records[i].Width, records[i].Height, records[i].DHash, day, ids[i]);
+                        records[i].Placement.Window.Handle, windowSizes[i].Width, windowSizes[i].Height, records[i].DHash, day, ids[i]);
                 }
             }
         }
@@ -183,10 +186,10 @@ public sealed class CapturePipeline : IDisposable
             throw;
         }
 
-        int saved = writtenFiles.Count, duplicates = records.Count - saved;
+        int savedCount = writtenFiles.Count, duplicates = records.Count - savedCount;
         Log.Information("Capture ({Trigger}): {Windows} window(s), {Saved} saved, {Duplicates} unchanged, capture {CaptureMs} ms, processing {ProcessMs} ms",
-            job.Decision.Trigger.ToDbName(), records.Count, saved, duplicates, job.CaptureMs, stopwatch.ElapsedMilliseconds);
-        Console.WriteLine($"{Prefix(job.Decision)} -> {records.Count} window(s): {saved} saved, {duplicates} unchanged (capture {job.CaptureMs} ms, encode {stopwatch.ElapsedMilliseconds} ms)");
+            job.Decision.Trigger.ToDbName(), records.Count, savedCount, duplicates, job.CaptureMs, stopwatch.ElapsedMilliseconds);
+        Console.WriteLine($"{Prefix(job.Decision)} -> {records.Count} window(s): {savedCount} saved, {duplicates} unchanged (capture {job.CaptureMs} ms, encode {stopwatch.ElapsedMilliseconds} ms)");
     }
 
     private static void DisposeImages(CaptureResult capture)
