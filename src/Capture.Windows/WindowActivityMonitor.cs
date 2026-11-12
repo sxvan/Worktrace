@@ -192,20 +192,24 @@ public sealed class WindowActivityMonitor : IDisposable
         hasRule = false;
         if (hwnd == default || processId == 0)
         {
-            return WindowSnapshot.NonWork;
+            return WindowSnapshot.Other;
         }
 
         string? processName = DesktopInspector.GetProcessName(processId);
         if (processName is null || !_allowlist.HasRuleFor(processName))
         {
-            return WindowSnapshot.NonWork;
+            return WindowSnapshot.Other;
         }
 
         hasRule = true;
         string title = DesktopInspector.GetTitle(hwnd);
-        return _allowlist.IsAllowed(processName, title)
-            ? WindowSnapshot.Allowed((long)(nint)hwnd, processName, title)
-            : WindowSnapshot.NonWork;
+        WindowClassification classification = _allowlist.Classify(processName, title);
+        return classification.Mode switch
+        {
+            WindowMode.Capture => WindowSnapshot.Captured((long)(nint)hwnd, processName, title),
+            WindowMode.Log => WindowSnapshot.Logged((long)(nint)hwnd, processName, classification.LogTitle ? title : null),
+            _ => WindowSnapshot.Other,
+        };
     }
 
     private void PollInput()

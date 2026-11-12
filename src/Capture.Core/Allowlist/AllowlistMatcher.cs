@@ -3,7 +3,26 @@ using Capture.Core.Config;
 
 namespace Capture.Core.Allowlist;
 
-/// <summary>Decides whether a window may be recorded. Anything without a matching rule is not allowed.</summary>
+/// <summary>What may be recorded about a window.</summary>
+public enum WindowMode
+{
+    /// <summary>No rule matches: nothing is recorded, not even the process name.</summary>
+    Other,
+
+    /// <summary>The process name (and the title, if the rule says so) is logged. Never captured.</summary>
+    Log,
+
+    /// <summary>Process name and title are logged and the window is captured.</summary>
+    Capture,
+}
+
+/// <param name="LogTitle">Whether the window title may be stored. Always true for <see cref="WindowMode.Capture"/>.</param>
+public readonly record struct WindowClassification(WindowMode Mode, bool LogTitle)
+{
+    public static WindowClassification Other => new(WindowMode.Other, false);
+}
+
+/// <summary>Decides what may be recorded about a window. Anything without a matching rule is <see cref="WindowMode.Other"/>.</summary>
 public sealed class AllowlistMatcher
 {
     private static readonly string[] PrivateWindowMarkers =
@@ -13,15 +32,23 @@ public sealed class AllowlistMatcher
 
     private static readonly TimeSpan MatchTimeout = TimeSpan.FromMilliseconds(100);
 
-    // Process name (without .exe) -> one entry per rule; a null entry is a rule without title patterns.
-    private readonly Dictionary<string, List<Regex[]?>> _rules = new(StringComparer.OrdinalIgnoreCase);
+    private sealed record Rule(WindowMode Mode, bool LogTitle, Regex[]? TitlePatterns);
 
-    public AllowlistMatcher(IEnumerable<AllowlistRule> rules)
+    // Keyed by process name without ".exe".
+    private readonly Dictionary<string, List<Rule>> _rules = new(StringComparer.OrdinalIgnoreCase);
+
+    public AllowlistMatcher(IEnumerable<WindowRule> rules)
     {
-        foreach (AllowlistRule rule in rules)
+        foreach (WindowRule rule in rules)
         {
             string process = NormalizeProcess(rule.Process);
-            if (process.Length == 0)
+            WindowMode? mode = rule.Mode?.Trim().ToLowerInvariant() switch
+            {
+                null or "" or "capture" => WindowMode.Capture,
+                "log" => WindowMode.Log,
+                _ => null, // unknown mode: ignore the rule instead of guessing
+            };
+            if (process.Length == 0 || mode is null)
             {
                 continue;
             }
@@ -30,60 +57,53 @@ public sealed class AllowlistMatcher
                 ? rule.TitlePatterns.Select(ToRegex).ToArray()
                 : null;
 
-            if (!_rules.TryGetValue(process, out List<Regex[]?>? list))
+            if (!_rules.TryGetValue(process, out List<Rule>? list))
             {
                 _rules[process] = list = [];
             }
-            list.Add(patterns);
+            list.Add(new Rule(mode.Value, mode == WindowMode.Capture || rule.LogTitles, patterns));
         }
     }
 
     /// <summary>
     /// True if any rule names this process. Callers use this to avoid even reading the title of
-    /// windows that can never be allowed.
+    /// windows that can never be recorded.
     /// </summary>
     public bool HasRuleFor(string processName) => _rules.ContainsKey(NormalizeProcess(processName));
 
-    public bool IsAllowed(string processName, string? title)
+    /// <summary>True if the window may be captured.</summary>
+    public bool IsAllowed(string processName, string? title) => Classify(processName, title).Mode == WindowMode.Capture;
+
+    /// <summary>The strongest matching rule wins: capture over log, and a rule that logs titles over one that does not.</summary>
+    public WindowClassification Classify(string processName, string? title)
     {
-        if (!_rules.TryGetValue(NormalizeProcess(processName), out List<Regex[]?>? rules))
+        if (!_rules.TryGetValue(NormalizeProcess(processName), out List<Rule>? rules))
         {
-            return false;
+            return WindowClassification.Other;
         }
 
         title ??= "";
         if (IsPrivateWindowTitle(title))
         {
-            return false;
+            return WindowClassification.Other;
         }
 
-        foreach (Regex[]? patterns in rules)
+        WindowClassification best = WindowClassification.Other;
+        foreach (Rule rule in rules)
         {
-            if (patterns is null)
+            if (!Matches(rule, title))
             {
-                return true;
+                continue;
             }
-
-            foreach (Regex pattern in patterns)
+            if (rule.Mode > best.Mode || (rule.Mode == best.Mode && rule.LogTitle && !best.LogTitle))
             {
-                try
-                {
-                    if (pattern.IsMatch(title))
-                    {
-                        return true;
-                    }
-                }
-                catch (RegexMatchTimeoutException)
-                {
-                    // Fail closed: an undecidable match is not a match.
-                }
+                best = new WindowClassification(rule.Mode, rule.LogTitle);
             }
         }
-
-        return false;
+        return best;
     }
 
-    /// <summary>Private browser windows are never allowed, regardless of rules.</summary>
+    /// <summary>Private browser windows are never recorded, regardless of rules.</summary>
     public static bool IsPrivateWindowTitle(string title)
     {
         foreach (string marker in PrivateWindowMarkers)
@@ -91,6 +111,30 @@ public sealed class AllowlistMatcher
             if (title.Contains(marker, StringComparison.OrdinalIgnoreCase))
             {
                 return true;
+            }
+        }
+        return false;
+    }
+
+    private static bool Matches(Rule rule, string title)
+    {
+        if (rule.TitlePatterns is null)
+        {
+            return true;
+        }
+
+        foreach (Regex pattern in rule.TitlePatterns)
+        {
+            try
+            {
+                if (pattern.IsMatch(title))
+                {
+                    return true;
+                }
+            }
+            catch (RegexMatchTimeoutException)
+            {
+                // Fail closed: an undecidable match is not a match.
             }
         }
         return false;

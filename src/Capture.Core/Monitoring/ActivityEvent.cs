@@ -10,12 +10,13 @@ public enum EventType
     Unlock,
     Sleep,
     Resume,
-    NonWork,
+    /// <summary>A window without a rule is in front, or no capturable window is visible.</summary>
+    Other,
     Paused,
     Resumed,
 }
 
-/// <summary>One row of the events table. Process, title and handle are null unless the window is allowed.</summary>
+/// <summary>One row of the events table. Process, title and handle are only set as far as the window's rule allows.</summary>
 public sealed record ActivityEvent(
     DateTimeOffset Timestamp,
     EventType Type,
@@ -35,12 +36,13 @@ public static class EventTypeNames
         EventType.Unlock => "unlock",
         EventType.Sleep => "sleep",
         EventType.Resume => "resume",
-        EventType.NonWork => "non_work",
+        EventType.Other => "other",
         EventType.Paused => "paused",
         EventType.Resumed => "resumed",
         _ => throw new ArgumentOutOfRangeException(nameof(type), type, null),
     };
 
     public static EventType FromDbName(string name) =>
-        Enum.GetValues<EventType>().First(t => t.ToDbName() == name);
+        // "non_work" is the earlier name of "other".
+        name == "non_work" ? EventType.Other : Enum.GetValues<EventType>().First(t => t.ToDbName() == name);
 }

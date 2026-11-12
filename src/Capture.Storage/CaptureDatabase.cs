@@ -108,6 +108,7 @@ public sealed class CaptureDatabase : IDisposable
             CREATE INDEX IF NOT EXISTS ix_capture_windows_capture ON capture_windows(capture_id);
 
             DROP TABLE IF EXISTS capture_decisions;  -- M2 placeholder
+            UPDATE events SET type = 'other' WHERE type = 'non_work';  -- renamed
             PRAGMA user_version=2;
             """);
     }

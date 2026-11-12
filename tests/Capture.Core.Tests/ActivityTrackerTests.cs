@@ -5,8 +5,8 @@ namespace Capture.Core.Tests;
 public class ActivityTrackerTests
 {
     private static readonly DateTimeOffset T0 = new(2026, 11, 12, 9, 0, 0, TimeSpan.Zero);
-    private static readonly WindowSnapshot Editor = WindowSnapshot.Allowed(100, "Code.exe", "a.cs");
-    private static readonly WindowSnapshot EditorOtherFile = WindowSnapshot.Allowed(100, "Code.exe", "b.cs");
+    private static readonly WindowSnapshot Editor = WindowSnapshot.Captured(100, "Code.exe", "a.cs");
+    private static readonly WindowSnapshot EditorOtherFile = WindowSnapshot.Captured(100, "Code.exe", "b.cs");
 
     private static ActivityTracker Tracker() => new(TimeSpan.FromMinutes(3));
 
@@ -23,18 +23,18 @@ public class ActivityTrackerTests
     [Fact]
     public void Non_allowed_window_is_logged_as_non_work_without_details()
     {
-        var e = Assert.Single(Tracker().Process(new ForegroundChanged(T0, WindowSnapshot.NonWork)));
+        var e = Assert.Single(Tracker().Process(new ForegroundChanged(T0, WindowSnapshot.Other)));
 
-        Assert.Equal(new ActivityEvent(T0, EventType.NonWork), e);
+        Assert.Equal(new ActivityEvent(T0, EventType.Other), e);
     }
 
     [Fact]
     public void Switching_between_non_work_windows_logs_only_once()
     {
         var tracker = Tracker();
-        tracker.Process(new ForegroundChanged(At(0), WindowSnapshot.NonWork));
+        tracker.Process(new ForegroundChanged(At(0), WindowSnapshot.Other));
 
-        Assert.Empty(tracker.Process(new ForegroundChanged(At(5), WindowSnapshot.NonWork)));
+        Assert.Empty(tracker.Process(new ForegroundChanged(At(5), WindowSnapshot.Other)));
     }
 
     [Fact]
@@ -64,9 +64,9 @@ public class ActivityTrackerTests
         var tracker = Tracker();
         tracker.Process(new ForegroundChanged(At(0), Editor));
 
-        var e = Assert.Single(tracker.Process(new TitleChanged(At(2), WindowSnapshot.NonWork)));
+        var e = Assert.Single(tracker.Process(new TitleChanged(At(2), WindowSnapshot.Other)));
 
-        Assert.Equal(new ActivityEvent(At(2), EventType.NonWork), e);
+        Assert.Equal(new ActivityEvent(At(2), EventType.Other), e);
     }
 
     [Fact]
@@ -111,7 +111,7 @@ public class ActivityTrackerTests
         var tracker = Tracker();
         tracker.Process(new SessionLocked(At(0)));
 
-        Assert.Empty(tracker.Process(new ForegroundChanged(At(1), WindowSnapshot.NonWork)));
+        Assert.Empty(tracker.Process(new ForegroundChanged(At(1), WindowSnapshot.Other)));
         Assert.Empty(tracker.Process(new InputTick(At(400), TimeSpan.FromSeconds(399))));
         Assert.False(tracker.IsIdle);
     }
@@ -122,11 +122,11 @@ public class ActivityTrackerTests
         var tracker = Tracker();
         tracker.Process(new ForegroundChanged(At(0), Editor));
         tracker.Process(new SessionLocked(At(1)));
-        tracker.Process(new ForegroundChanged(At(2), WindowSnapshot.NonWork));
+        tracker.Process(new ForegroundChanged(At(2), WindowSnapshot.Other));
 
         var events = tracker.Process(new SessionUnlocked(At(3)));
 
-        Assert.Equal([EventType.Unlock, EventType.NonWork], events.Select(e => e.Type));
+        Assert.Equal([EventType.Unlock, EventType.Other], events.Select(e => e.Type));
     }
 
     [Fact]
@@ -151,5 +151,24 @@ public class ActivityTrackerTests
 
         Assert.Equal([EventType.Resume], tracker.Process(new SystemResumed(At(50))).Select(e => e.Type));
         Assert.Equal([EventType.Unlock, EventType.Foreground], tracker.Process(new SessionUnlocked(At(60))).Select(e => e.Type));
+    }
+
+    [Fact]
+    public void Log_only_window_is_logged_with_process_but_without_title()
+    {
+        var e = Assert.Single(Tracker().Process(new ForegroundChanged(T0, WindowSnapshot.Logged(7, "keepass.exe", null))));
+
+        Assert.Equal(new ActivityEvent(T0, EventType.Foreground, "keepass.exe", null, 7), e);
+    }
+
+    [Fact]
+    public void Log_only_window_with_titles_logs_title_changes()
+    {
+        var tracker = Tracker();
+        tracker.Process(new ForegroundChanged(At(0), WindowSnapshot.Logged(7, "msedge.exe", "Docs")));
+
+        var e = Assert.Single(tracker.Process(new TitleChanged(At(3), WindowSnapshot.Logged(7, "msedge.exe", "Mail"))));
+
+        Assert.Equal(new ActivityEvent(At(3), EventType.TitleChange, "msedge.exe", "Mail", 7), e);
     }
 }

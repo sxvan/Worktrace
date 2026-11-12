@@ -67,7 +67,7 @@ public sealed class CaptureCoordinator(
                 if (!_lastCaptureFoundNothing)
                 {
                     _lastCaptureFoundNothing = true;
-                    database.InsertEvent(new ActivityEvent(decision.Timestamp, EventType.NonWork));
+                    database.InsertEvent(new ActivityEvent(decision.Timestamp, EventType.Other));
                 }
                 Log.Information("Capture ({Trigger}): no allowed window visible", decision.Trigger.ToDbName());
                 Console.WriteLine($"{CapturePipeline.Prefix(decision)} -> nothing to capture (no allowed window visible)");
@@ -93,7 +93,7 @@ public sealed class CaptureCoordinator(
             Log.Information("Event {Type}", e.Type.ToDbName());
             Console.WriteLine($"{e.Timestamp.ToLocalTime():HH:mm:ss}  {e.Type.ToDbName(),-12}  {e.ProcessName}");
 
-            if (e.Type is EventType.Foreground or EventType.TitleChange or EventType.NonWork)
+            if (e.Type is EventType.Foreground or EventType.TitleChange or EventType.Other)
             {
                 triggers.OnWindowChanged(signal.Timestamp);
             }

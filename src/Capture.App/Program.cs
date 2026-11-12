@@ -63,11 +63,11 @@ Log.Logger = new LoggerConfiguration()
 
 try
 {
-    Log.Information("Starting. Storage root: {Root}. Allowlist rules: {RuleCount}", paths.Root, config.Allowlist.Count);
+    Log.Information("Starting. Storage root: {Root}. Allowlist rules: {RuleCount}", paths.Root, config.Rules.Count);
 
     using var database = new CaptureDatabase(paths.DatabaseFile);
     var tracker = new ActivityTracker(TimeSpan.FromSeconds(config.IdleTimeoutSeconds));
-    var allowlist = new AllowlistMatcher(config.Allowlist);
+    var allowlist = new AllowlistMatcher(config.Rules);
 
     // The monitor thread only enqueues; database writes happen on the consumer below.
     var signals = Channel.CreateUnbounded<MonitorSignal>(new UnboundedChannelOptions { SingleReader = true });

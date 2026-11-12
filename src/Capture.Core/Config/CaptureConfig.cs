@@ -24,10 +24,17 @@ public sealed class CaptureConfig
     /// <summary>No input for this long counts as idle.</summary>
     public int IdleTimeoutSeconds { get; set; } = 180;
 
-    public List<AllowlistRule> Allowlist { get; set; } =
+    /// <summary>
+    /// What may be recorded, per application. Windows that match no rule are logged only as "other",
+    /// without process name or title, and are never captured.
+    /// </summary>
+    public List<WindowRule> Rules { get; set; } =
     [
         new() { Process = "Code.exe" },
         new() { Process = "WindowsTerminal.exe" },
+        new() { Process = "msedge.exe", Mode = "log", LogTitles = true },
+        new() { Process = "chrome.exe", Mode = "log", LogTitles = true },
+        new() { Process = "firefox.exe", Mode = "log", LogTitles = true },
     ];
 
     public int RetentionDays { get; set; } = 14;
@@ -43,14 +50,32 @@ public sealed class CaptureConfig
     /// <summary>AVIF encoder effort: 0 gives the smallest files, 9 is the fastest.</summary>
     public int ImageEncoderSpeed { get; set; } = 8;
 
-    /// <summary>Maximum dHash Hamming distance at which two composites count as the same image.</summary>
+    /// <summary>Maximum dHash Hamming distance at which two images count as the same.</summary>
     public int DedupeThreshold { get; set; } = 4;
+
+    /// <summary>
+    /// Read the text in every image before saving it and black out anything that looks like a
+    /// secret. If the text cannot be read, the image is not saved.
+    /// </summary>
+    public bool RedactSecrets { get; set; } = true;
+
+    /// <summary>Take no capture while the focused element is a password field.</summary>
+    public bool SkipPasswordFields { get; set; } = true;
 }
 
-public sealed class AllowlistRule
+public sealed class WindowRule
 {
     /// <summary>Executable name, e.g. "Code.exe". Case-insensitive; the ".exe" suffix is optional.</summary>
     public string Process { get; set; } = "";
+
+    /// <summary>
+    /// "capture": log process and title, and take screenshots.
+    /// "log": log that the application is used, but never take screenshots.
+    /// </summary>
+    public string Mode { get; set; } = "capture";
+
+    /// <summary>For "log" rules: also store the window title. Leave off for password managers, mail and the like.</summary>
+    public bool LogTitles { get; set; }
 
     /// <summary>
     /// Optional window title patterns with * and ? wildcards. If present, at least one must match the whole title.

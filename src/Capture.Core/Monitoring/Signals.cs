@@ -1,28 +1,34 @@
+using Capture.Core.Allowlist;
+
 namespace Capture.Core.Monitoring;
 
 /// <summary>
 /// What the monitoring layer is allowed to tell the rest of the app about a window.
-/// A window that is not on the allowlist carries no handle, process name or title.
+/// A window without a rule carries no handle, process name or title; a log-only window carries
+/// its title only if its rule says so.
 /// </summary>
 public sealed record WindowSnapshot
 {
-    private WindowSnapshot(bool isAllowed, long handle, string? processName, string? title)
+    private WindowSnapshot(WindowMode mode, long handle, string? processName, string? title)
     {
-        IsAllowed = isAllowed;
+        Mode = mode;
         Handle = handle;
         ProcessName = processName;
         Title = title;
     }
 
-    public bool IsAllowed { get; }
+    public WindowMode Mode { get; }
     public long Handle { get; }
     public string? ProcessName { get; }
     public string? Title { get; }
 
-    public static WindowSnapshot NonWork { get; } = new(false, 0, null, null);
+    public static WindowSnapshot Other { get; } = new(WindowMode.Other, 0, null, null);
 
-    public static WindowSnapshot Allowed(long handle, string processName, string title) =>
-        new(true, handle, processName, title);
+    public static WindowSnapshot Captured(long handle, string processName, string title) =>
+        new(WindowMode.Capture, handle, processName, title);
+
+    public static WindowSnapshot Logged(long handle, string processName, string? title) =>
+        new(WindowMode.Log, handle, processName, title);
 }
 
 /// <summary>Raw observations from the operating system, in the order they happened.</summary>
