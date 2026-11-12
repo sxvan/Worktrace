@@ -1,0 +1,10 @@
+SetWinEventHook
+UnhookWinEvent
+GetForegroundWindow
+GetWindowText
+GetWindowTextLength
+GetWindowThreadProcessId
+GetLastInputInfo
+WTSRegisterSessionNotification
+WTSUnRegisterSessionNotification
+PostMessage
