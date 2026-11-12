@@ -5,3 +5,5 @@ obj/
 publish/
 # M0 prototype debug output (raw captures, never commit)
 m0-output/
+# Local capture data (screenshots, database, logs): never commit
+data/
