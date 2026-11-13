@@ -7,6 +7,3 @@ publish/
 m0-output/
 # Local capture data (screenshots, database, logs): never commit
 data/
-# Python environments of experiments
-.venv/
-__pycache__/

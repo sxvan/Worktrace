@@ -62,6 +62,31 @@ public sealed class HeuristicSecretDetector : ISecretDetector
         @"[""'\s]*(=>|:=|=|:)[""'\s]*(?<value>[^\s""',;]{4,})",
         Options | RegexOptions.IgnoreCase, Timeout);
 
+    /// <summary>Other places where the context says "the next thing is a password". Only the value is hidden.</summary>
+    private static readonly Regex[] PasswordContexts =
+    [
+        // DB_PASS=..., smtp-pass: ..., pw = ..., PIN: ...  (the short name must stand alone, so "bypass" or "passed" do not count)
+        new(@"(?<![A-Za-z])(?:pass|pw|pin)(?![A-Za-z])[\w.\-]*[""'\s]*(?:=|:)[""'\s]*(?<value>[^\s""',;]{4,})",
+            Options | RegexOptions.IgnoreCase, Timeout),
+        // mysql -u root -pS3cret
+        new(@"\b(?:mysql|mysqldump|mysqladmin|mariadb)\b.*?\s-p(?<value>[^\s]{3,})", Options | RegexOptions.IgnoreCase, Timeout),
+        // sshpass -p 'S3cret' ssh ...
+        new(@"\bsshpass\s+-p\s*[""']?(?<value>[^\s""']{3,})", Options | RegexOptions.IgnoreCase, Timeout),
+        // net use ... /user:corp\name S3cret
+        new(@"/user:\S+\s+(?<value>[^\s/]{4,})", Options | RegexOptions.IgnoreCase, Timeout),
+        // login: admin / S3cret  (the value needs a digit or symbol, so "user: alice / engineering" stays)
+        new(@"\b(?:login|user(?:name)?|credentials?)\s*[:=]\s*\S+\s*/\s*(?<value>(?=\S*[^\sA-Za-z])\S{4,})", Options | RegexOptions.IgnoreCase, Timeout),
+    ];
+
+    /// <summary>"the password is ..." in prose: everything after it on the row is hidden, since a passphrase can be several words.</summary>
+    private static readonly Regex PasswordInProse = new(
+        @"\b(?:password|passwort|passphrase|passcode)\s+(?:is|was|ist|lautet)\b\s*:?\s*(?<value>\S.*)$",
+        Options | RegexOptions.IgnoreCase, Timeout);
+
+    /// <summary>A function call or a file path where a value is expected: code, not a secret.</summary>
+    private static readonly Regex CodeNotSecret = new(
+        @"^(?:[A-Za-z_][\w.]*\(|/|\./|~/|[A-Za-z]:\\)", Options, Timeout);
+
     /// <summary>user:password@host inside a URL. The whole URL word is hidden.</summary>
     private static readonly Regex UrlCredentials = new(
         @"\b[A-Za-z][A-Za-z0-9+.\-]*://[^\s:/@]+:[^\s@/]+@\S*", Options, Timeout);
@@ -136,6 +161,24 @@ public sealed class HeuristicSecretDetector : ISecretDetector
                     }
                 }
 
+                foreach (Regex context in PasswordContexts)
+                {
+                    foreach (Match match in context.Matches(text))
+                    {
+                        Group value = match.Groups["value"];
+                        if (IsSecretValue("password", value.Value))
+                        {
+                            Add(regions, line, wordStarts, value.Index, value.Length);
+                        }
+                    }
+                }
+
+                if (PasswordInProse.Match(text) is { Success: true } prose)
+                {
+                    Group value = prose.Groups["value"];
+                    Add(regions, line, wordStarts, value.Index, value.Length);
+                }
+
                 MatchCollection urls = UrlCredentials.Matches(text);
                 foreach (Match match in urls)
                 {
@@ -167,7 +210,7 @@ public sealed class HeuristicSecretDetector : ISecretDetector
     private static bool IsSecretValue(string kind, string value)
     {
         value = value.Trim('"', '\'', '`', '(', ')', '{', '}', '[', ']', '<', '>');
-        if (value.Length < 4 || HarmlessValues.Contains(value))
+        if (value.Length < 3 || HarmlessValues.Contains(value) || CodeNotSecret.IsMatch(value))
         {
             return false;
         }

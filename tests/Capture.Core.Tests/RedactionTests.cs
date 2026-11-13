@@ -121,6 +121,41 @@ public class RedactionTests
         Assert.Empty(Find(line));
     }
 
+    // ---- Passwords given away by their context ----
+
+    [Theory]
+    [InlineData("export DB_PASS=Sommer2024!", "DB_PASS=Sommer2024!")]
+    [InlineData("smtp-pass: Sommer2024!", "Sommer2024!")]
+    [InlineData("pw = Sommer2024!", "Sommer2024!")]
+    [InlineData("mysql -u root -pS3cretPass prod_db", "-pS3cretPass")]
+    [InlineData("sshpass -p Sommer2024! ssh deploy@host", "Sommer2024!")]
+    [InlineData("net use Z: \\\\fileserver\\share /user:corp\\svc_backup Winter!2026", "Winter!2026")]
+    [InlineData("login: admin / Sommer2024!", "Sommer2024!")]
+    [InlineData("mysql --password=Sommer2024! prod_db", "--password=Sommer2024!")]
+    public void Password_is_found_from_its_context(string line, string expectedHiddenWord)
+    {
+        Assert.Contains(expectedHiddenWord, Hidden(line));
+    }
+
+    [Fact]
+    public void Passphrase_in_prose_is_hidden_to_the_end_of_the_row()
+    {
+        Assert.Equal(["correct", "horse", "battery", "staple"], Hidden("the wifi password is correct horse battery staple"));
+    }
+
+    [Theory]
+    [InlineData("all tests passed: 141 of 141")]
+    [InlineData("bypass: enabled for admins")]
+    [InlineData("mysql -u root -p prod_db")]                                   // asks for the password interactively
+    [InlineData("pin: true")]
+    [InlineData("password_hash = bcrypt.hashpw(pw, salt)")]                   // a function call, not a value
+    [InlineData("docker run -e POSTGRES_PASSWORD_FILE=/run/secrets/db_password postgres:17")] // a file path
+    [InlineData("user: alice / engineering team")]
+    public void Lookalikes_of_password_contexts_are_left_alone(string line)
+    {
+        Assert.Empty(Find(line));
+    }
+
     // ---- Text as recognition really returns it ----
 
     [Theory]
