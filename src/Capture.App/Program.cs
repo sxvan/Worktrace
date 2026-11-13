@@ -45,6 +45,27 @@ if (args.Length > 0 && args[0] == "--dump")
     return 0;
 }
 
+if (args.Length > 1 && args[0] == "--detect-lines")
+{
+    // Evaluation helper: runs the secret detector on each line of a text file and prints 1 or 0 per line.
+    var lineDetector = new HeuristicSecretDetector();
+    foreach (string textLine in File.ReadLines(args[1]))
+    {
+        var words = new List<RecognizedWord>();
+        int column = 0;
+        foreach (string word in textLine.Split(' '))
+        {
+            if (word.Length > 0)
+            {
+                words.Add(new RecognizedWord(word, new Capture.Core.Geometry.RectInt(column * 10, 0, (column + word.Length) * 10, 20)));
+            }
+            column += word.Length + 1;
+        }
+        Console.WriteLine(lineDetector.FindSecrets([new RecognizedLine(words)]).Count > 0 ? "1" : "0");
+    }
+    return 0;
+}
+
 if (args.Length > 0 && args[0] == "--redaction-test")
 {
     double testScale = args.Length > 1 && double.TryParse(args[1], System.Globalization.CultureInfo.InvariantCulture, out double s) ? s : WindowsOcrRecognizer.DefaultScale;
