@@ -55,6 +55,14 @@ public class RedactionTests
         "xox" + "b-" + "123456789012-" + Body[..20],
         "AKIA" + "IOSFODNN7EXAMPLE",
         "AIza" + Body[..35],
+        "hf" + "_" + Body[..34],
+        "SG" + "." + Body[..22] + "." + Body,
+        "dop" + "_v1_" + Body + Body,
+        "pypi" + "-" + Body + Body,
+        "GOC" + "SPX-" + Body[..28],
+        "whs" + "ec_" + Body[..32],
+        "sb" + "_secret_" + Body[..24],
+        "123456789" + ":" + Body[..35],
         "eyJ" + "hbGciOiJIUzI1NiJ9" + "." + "eyJ" + "zdWIiOiIxMjM0NTY3ODkwIn0" + "." + "abcDEF123456",
     };
 

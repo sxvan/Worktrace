@@ -22,11 +22,22 @@ public sealed class HeuristicSecretDetector : ISecretDetector
     [
         new(@"\bsk-[A-Za-z0-9_\-]{16,}", Options, Timeout),                               // OpenAI, Anthropic
         new(@"\b(sk|pk|rk)_(live|test)_[A-Za-z0-9]{16,}", Options, Timeout),              // Stripe
+        new(@"\bwhsec_[A-Za-z0-9]{16,}", Options, Timeout),                               // Stripe webhook secret
+        new(@"\bhf_[A-Za-z0-9]{30,}", Options, Timeout),                                  // Hugging Face
+        new(@"\bsb_(publishable|secret)_[A-Za-z0-9_\-]{5,}", Options, Timeout),           // Supabase
+        new(@"\bSG\.[A-Za-z0-9_\-]{16,}\.[A-Za-z0-9_\-]{16,}", Options, Timeout),         // SendGrid
+        new(@"\bSK[0-9a-fA-F]{32}", Options, Timeout),                                    // Twilio
+        new(@"\bdop_v1_[A-Za-z0-9]{40,}", Options, Timeout),                              // DigitalOcean
+        new(@"\bpypi-[A-Za-z0-9_\-]{40,}", Options, Timeout),                             // PyPI
+        new(@"\bGOCSPX-[A-Za-z0-9_\-]{20,}", Options, Timeout),                           // Google OAuth client secret
+        new(@"\bvcp_[A-Za-z0-9_\-]{20,}", Options, Timeout),                              // Vercel
+        new(@"\bph[xc]_[A-Za-z0-9_]{40,}", Options, Timeout),                             // PostHog
+        new(@"\b\d{8,10}:[A-Za-z0-9_\-]{30,}", Options, Timeout),                         // Telegram bot token
         new(@"\bgh[pousr]_[A-Za-z0-9]{20,}", Options, Timeout),                           // GitHub
         new(@"\bgithub_pat_[A-Za-z0-9_]{20,}", Options, Timeout),
-        new(@"\bglpat-[A-Za-z0-9_\-]{16,}", Options, Timeout),                            // GitLab
+        new(@"\bgl(pat|cbt|oas|soat)-[A-Za-z0-9_\-]{16,}", Options, Timeout),             // GitLab
         new(@"\bnpm_[A-Za-z0-9]{30,}", Options, Timeout),
-        new(@"\bxox[abprs]-[A-Za-z0-9\-]{10,}", Options, Timeout),                        // Slack
+        new(@"\b(xox[abeprs]|xapp)-[A-Za-z0-9\-]{10,}", Options, Timeout),                // Slack
         new(@"\b(AKIA|ASIA)[0-9A-Za-z]{12,}", Options, Timeout),                          // AWS access key id
         new(@"\b(?=[A-Z0-9]*\d)[A-Z0-9]{16,}", Options, Timeout),                         // long run of capitals and digits
         new(@"\bAIza[0-9A-Za-z_\-]{30,}", Options, Timeout),                              // Google API key
