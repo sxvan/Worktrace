@@ -25,3 +25,4 @@ CloseHandle
 IUIAutomation
 CUIAutomation
 IUIAutomationElement
+GetClassName

@@ -125,7 +125,16 @@ public static class DesktopInspector
 
         (bool Allowed, string? Process, string? Title) result = (false, null, null);
 
-        string? process = GetProcessName(GetProcessId(hwnd));
+        // Never captured, whatever the rules say: this app's own windows (its tray menu) and the
+        // Windows shell (desktop, taskbar). They still count as covering what is behind them.
+        uint processId = GetProcessId(hwnd);
+        if (processId == Environment.ProcessId || IsShellWindow(hwnd))
+        {
+            cache[hwnd] = result;
+            return result;
+        }
+
+        string? process = GetProcessName(processId);
         if (process is not null && allowlist.HasRuleFor(process))
         {
             string title = GetTitle(hwnd);
@@ -151,6 +160,18 @@ public static class DesktopInspector
 
         cache[hwnd] = result;
         return result;
+    }
+
+    private static readonly HashSet<string> ShellWindowClasses = new(StringComparer.Ordinal)
+    {
+        "Progman", "WorkerW", "Shell_TrayWnd", "Shell_SecondaryTrayWnd", "NotifyIconOverflowWindow", "TopLevelWindowForOverflowXamlIsland",
+    };
+
+    private static unsafe bool IsShellWindow(HWND hwnd)
+    {
+        char* buffer = stackalloc char[128];
+        int length = PInvoke.GetClassName(hwnd, buffer, 128);
+        return length > 0 && ShellWindowClasses.Contains(new string(buffer, 0, length));
     }
 
     internal static unsafe uint GetProcessId(HWND hwnd)

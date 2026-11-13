@@ -133,6 +133,36 @@ public class AllowlistMatcherTests
     }
 
     [Fact]
+    public void Catch_all_rule_applies_to_every_application_without_its_own_rule()
+    {
+        var matcher = Matcher(new WindowRule { Process = "*" });
+
+        Assert.True(matcher.HasRuleFor("anything.exe"));
+        Assert.Equal(WindowMode.Capture, matcher.Classify("spotify.exe", "Song").Mode);
+        Assert.Equal(WindowMode.Capture, matcher.Classify("Code.exe", "a.cs").Mode);
+    }
+
+    [Fact]
+    public void Own_rule_of_an_application_overrides_the_catch_all()
+    {
+        var matcher = Matcher(
+            new WindowRule { Process = "*" },
+            new WindowRule { Process = "keepass.exe", Mode = "log" });
+
+        Assert.Equal(new WindowClassification(WindowMode.Log, LogTitle: false), matcher.Classify("keepass.exe", "Bank"));
+        Assert.Equal(WindowMode.Capture, matcher.Classify("notepad.exe", "notes.txt").Mode);
+    }
+
+    [Fact]
+    public void Catch_all_skips_untitled_windows_and_private_windows()
+    {
+        var matcher = Matcher(new WindowRule { Process = "*" });
+
+        Assert.Equal(WindowClassification.Other, matcher.Classify("helper.exe", ""));
+        Assert.Equal(WindowClassification.Other, matcher.Classify("msedge.exe", "New tab - InPrivate - Microsoft Edge"));
+    }
+
+    [Fact]
     public void Rule_with_an_unknown_mode_is_ignored()
     {
         var matcher = Matcher(new WindowRule { Process = "app.exe", Mode = "everything" });

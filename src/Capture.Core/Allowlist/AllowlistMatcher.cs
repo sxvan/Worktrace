@@ -34,8 +34,12 @@ public sealed class AllowlistMatcher
 
     private sealed record Rule(WindowMode Mode, bool LogTitle, Regex[]? TitlePatterns);
 
+    /// <summary>A rule with this process name applies to every application that has no rule of its own.</summary>
+    public const string AnyProcess = "*";
+
     // Keyed by process name without ".exe".
     private readonly Dictionary<string, List<Rule>> _rules = new(StringComparer.OrdinalIgnoreCase);
+    private readonly List<Rule> _catchAll = [];
 
     public AllowlistMatcher(IEnumerable<WindowRule> rules)
     {
@@ -57,11 +61,18 @@ public sealed class AllowlistMatcher
                 ? rule.TitlePatterns.Select(ToRegex).ToArray()
                 : null;
 
+            var parsed = new Rule(mode.Value, mode == WindowMode.Capture || rule.LogTitles, patterns);
+            if (process == AnyProcess)
+            {
+                _catchAll.Add(parsed);
+                continue;
+            }
+
             if (!_rules.TryGetValue(process, out List<Rule>? list))
             {
                 _rules[process] = list = [];
             }
-            list.Add(new Rule(mode.Value, mode == WindowMode.Capture || rule.LogTitles, patterns));
+            list.Add(parsed);
         }
     }
 
@@ -69,7 +80,7 @@ public sealed class AllowlistMatcher
     /// True if any rule names this process. Callers use this to avoid even reading the title of
     /// windows that can never be recorded.
     /// </summary>
-    public bool HasRuleFor(string processName) => _rules.ContainsKey(NormalizeProcess(processName));
+    public bool HasRuleFor(string processName) => _catchAll.Count > 0 || _rules.ContainsKey(NormalizeProcess(processName));
 
     /// <summary>True if the window may be captured.</summary>
     public bool IsAllowed(string processName, string? title) => Classify(processName, title).Mode == WindowMode.Capture;
@@ -77,15 +88,21 @@ public sealed class AllowlistMatcher
     /// <summary>The strongest matching rule wins: capture over log, and a rule that logs titles over one that does not.</summary>
     public WindowClassification Classify(string processName, string? title)
     {
-        if (!_rules.TryGetValue(NormalizeProcess(processName), out List<Rule>? rules))
-        {
-            return WindowClassification.Other;
-        }
-
         title ??= "";
         if (IsPrivateWindowTitle(title))
         {
             return WindowClassification.Other;
+        }
+
+        // An application's own rules decide alone, so a "log" rule can exempt it from a catch-all
+        // "capture" rule. The catch-all skips untitled windows: those are helpers and overlays.
+        if (!_rules.TryGetValue(NormalizeProcess(processName), out List<Rule>? rules))
+        {
+            if (_catchAll.Count == 0 || title.Length == 0)
+            {
+                return WindowClassification.Other;
+            }
+            rules = _catchAll;
         }
 
         WindowClassification best = WindowClassification.Other;
