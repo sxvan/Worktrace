@@ -2,6 +2,7 @@
 //
 //   TimeCapture              run the monitor until Ctrl+C
 //   TimeCapture --dump [n]   print the last n stored events (default 50), including window titles
+//   TimeCapture --redaction-test   check secret redaction on this machine with made-up secrets
 
 using System.Threading.Channels;
 using Capture.App;
@@ -9,6 +10,7 @@ using Capture.Core.Allowlist;
 using Capture.Core.Config;
 using Capture.Core.Monitoring;
 using Capture.Core.Pipeline;
+using Capture.Core.Redaction;
 using Capture.Core.Triggers;
 using Capture.Storage;
 using Capture.Windows;
@@ -41,6 +43,31 @@ if (args.Length > 0 && args[0] == "--dump")
         Console.WriteLine($"{timestamp.ToLocalTime():yyyy-MM-dd HH:mm:ss}  {text}");
     }
     return 0;
+}
+
+if (args.Length > 0 && args[0] == "--redaction-test")
+{
+    double testScale = args.Length > 1 && double.TryParse(args[1], System.Globalization.CultureInfo.InvariantCulture, out double s) ? s : WindowsOcrRecognizer.DefaultScale;
+    bool verbose = args.Contains("--verbose");
+    WindowsOcrRecognizer? testRecognizer = WindowsOcrRecognizer.TryCreate(testScale);
+    if (testRecognizer is null)
+    {
+        Console.Error.WriteLine("Windows has no OCR language installed.");
+        return 4;
+    }
+    RedactionSelfTest.Report report = await RedactionSelfTest.RunAsync(testRecognizer, [new HeuristicSecretDetector()]);
+    foreach (var group in report.Cases.GroupBy(c => (c.Theme, c.FontSize)))
+    {
+        Console.WriteLine($"{group.Key.Theme} theme, {group.Key.FontSize} pt: {group.Count(c => c.Found)} of {group.Count()} fake secrets found");
+        foreach (RedactionSelfTest.Case missed in group.Where(c => !c.Found && verbose))
+        {
+            Console.WriteLine($"  MISSED  {missed.Line}");
+            Console.WriteLine($"  read as {missed.RecognizedAs}");
+        }
+    }
+    Console.WriteLine($"False positives on harmless lines: {report.FalsePositives}");
+    Console.WriteLine($"Text recognition and detection: {report.MillisecondsPerImage} ms per {report.Width}x{report.Height} image ({testRecognizer.LanguageTag}, enlarged {testScale}x)");
+    return report.Cases.All(c => c.Found) ? 0 : 5;
 }
 
 using var mutex = new Mutex(initiallyOwned: true, @"Local\TimeCapture.SingleInstance", out bool isFirstInstance);
@@ -115,8 +142,29 @@ try
         }
     }, null, TimeSpan.Zero, TimeSpan.FromDays(1));
 
+    IRedactor redactor;
+    if (config.RedactSecrets)
+    {
+        WindowsOcrRecognizer? recognizer = WindowsOcrRecognizer.TryCreate();
+        if (recognizer is null)
+        {
+            // Without text recognition nothing can be checked, so nothing may be saved.
+            Console.Error.WriteLine("Secret redaction is on, but Windows has no OCR language installed. Install one (Settings > Time & language > Language) or set redactSecrets to false.");
+            Log.Fatal("No OCR language installed; refusing to capture");
+            return 4;
+        }
+        redactor = new TextRedactor(recognizer, [new HeuristicSecretDetector()]);
+        Console.WriteLine($"Secret redaction: on (text recognition language {recognizer.LanguageTag})");
+    }
+    else
+    {
+        redactor = new PassThroughRedactor();
+        Log.Warning("Secret redaction is switched off in the config");
+        Console.WriteLine("Secret redaction: OFF (redactSecrets is false)");
+    }
+
     using var pipeline = new CapturePipeline(
-        new PassThroughRedactor(),
+        redactor,
         new FileImageStore(paths.Root, config.ImageQuality, Math.Clamp(config.ImageEncoderSpeed, 0, 9), config.MaxImageDimension),
         database,
         config.DedupeThreshold);

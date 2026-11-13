@@ -50,8 +50,10 @@ public sealed class RedactedWindowImage : IDisposable
 {
     private byte[]? _pixels;
 
-    internal RedactedWindowImage(DateTimeOffset timestamp, WindowPlacement placement, int width, int height, byte[] pixels)
+    internal RedactedWindowImage(
+        DateTimeOffset timestamp, WindowPlacement placement, int width, int height, byte[] pixels, int redactionCount)
     {
+        RedactionCount = redactionCount;
         Timestamp = timestamp;
         Placement = placement;
         Width = width;
@@ -63,6 +65,9 @@ public sealed class RedactedWindowImage : IDisposable
     public WindowPlacement Placement { get; }
     public int Width { get; }
     public int Height { get; }
+
+    /// <summary>How many regions the redaction stage blacked out.</summary>
+    public int RedactionCount { get; }
 
     /// <summary>BGRA, rows top to bottom.</summary>
     public byte[] Pixels => _pixels ?? throw new ObjectDisposedException(nameof(RedactedWindowImage));

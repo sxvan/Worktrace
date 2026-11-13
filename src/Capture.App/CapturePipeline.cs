@@ -10,7 +10,7 @@ namespace Capture.App;
 /// <summary>
 /// Everything after the capture itself, on one background thread at below-normal priority:
 ///
-///   IRedactor -> dedupe -> encode -> IImageStore -> database
+///   dedupe -> IRedactor -> encode -> IImageStore -> database
 ///
 /// Captures are queued so encoding never holds up event handling. If encoding falls behind,
 /// new captures are dropped instead of piling up in memory.
@@ -118,6 +118,7 @@ public sealed class CapturePipeline : IDisposable
         var records = new List<CapturedWindowRecord>();
         var writtenFiles = new List<string>();
         var windowSizes = new List<(int Width, int Height)>();
+        int redactions = 0, dropped = 0;
         DateOnly day = DateOnly.FromDateTime(job.Decision.Timestamp.LocalDateTime);
 
         try
@@ -126,34 +127,46 @@ public sealed class CapturePipeline : IDisposable
             foreach (RawWindowImage raw in job.Capture.Images)
             {
                 sequence++;
+                long handle = raw.Placement.Window.Handle;
+                bool focused = handle == job.Capture.FocusedWindowHandle;
+                int width = raw.Width, height = raw.Height;
+
+                // Dedupe first: an unchanged window is not saved, so there is nothing to redact.
+                // Only the 64-bit hash of the unredacted image is kept.
+                ulong hash = DHash.Compute(raw.Pixels, width, height);
+                long? duplicateOf = _deduplicator.FindDuplicate(handle, width, height, hash, day);
+                if (duplicateOf is not null)
+                {
+                    records.Add(new CapturedWindowRecord(raw.Placement, focused, width, height, hash, null, duplicateOf));
+                    windowSizes.Add((width, height));
+                    continue;
+                }
+
                 RedactionResult redaction = _redactor.RedactAsync(raw, CancellationToken.None).AsTask().GetAwaiter().GetResult();
                 if (redaction.Image is null)
                 {
-                    Log.Information("Window image dropped by redaction: {Reason}", redaction.DropReason);
+                    dropped++;
+                    Log.Warning("Window image dropped by redaction: {Reason}", redaction.DropReason);
                     continue;
                 }
 
                 using RedactedWindowImage image = redaction.Image;
-                long handle = image.Placement.Window.Handle;
-                ulong hash = DHash.Compute(image.Pixels, image.Width, image.Height);
-                long? duplicateOf = _deduplicator.FindDuplicate(handle, image.Width, image.Height, hash, day);
+                SavedImage saved = _imageStore.Save(image, sequence);
+                writtenFiles.Add(saved.RelativePath);
+                redactions += image.RedactionCount;
 
-                SavedImage? saved = null;
-                if (duplicateOf is null)
-                {
-                    saved = _imageStore.Save(image, sequence);
-                    writtenFiles.Add(saved.RelativePath);
-                }
-
-                // Width and height describe the saved file; for a duplicate, the window's own size.
+                // Width and height describe the saved file, which can be scaled down.
                 records.Add(new CapturedWindowRecord(
-                    image.Placement, handle == job.Capture.FocusedWindowHandle,
-                    saved?.Width ?? image.Width, saved?.Height ?? image.Height, hash, saved?.RelativePath, duplicateOf));
-                windowSizes.Add((image.Width, image.Height));
+                    image.Placement, focused, saved.Width, saved.Height, hash, saved.RelativePath, null, image.RedactionCount));
+                windowSizes.Add((width, height));
             }
 
             if (records.Count == 0)
             {
+                if (dropped > 0)
+                {
+                    Console.WriteLine($"{Prefix(job.Decision)} -> {dropped} window(s) dropped by redaction, nothing saved");
+                }
                 return;
             }
 
@@ -187,9 +200,10 @@ public sealed class CapturePipeline : IDisposable
         }
 
         int savedCount = writtenFiles.Count, duplicates = records.Count - savedCount;
-        Log.Information("Capture ({Trigger}): {Windows} window(s), {Saved} saved, {Duplicates} unchanged, capture {CaptureMs} ms, processing {ProcessMs} ms",
-            job.Decision.Trigger.ToDbName(), records.Count, savedCount, duplicates, job.CaptureMs, stopwatch.ElapsedMilliseconds);
-        Console.WriteLine($"{Prefix(job.Decision)} -> {records.Count} window(s): {savedCount} saved, {duplicates} unchanged (capture {job.CaptureMs} ms, encode {stopwatch.ElapsedMilliseconds} ms)");
+        Log.Information("Capture ({Trigger}): {Windows} window(s), {Saved} saved, {Duplicates} unchanged, {Redactions} region(s) redacted, {Dropped} dropped, capture {CaptureMs} ms, processing {ProcessMs} ms",
+            job.Decision.Trigger.ToDbName(), records.Count, savedCount, duplicates, redactions, dropped, job.CaptureMs, stopwatch.ElapsedMilliseconds);
+        string extra = (redactions > 0 ? $", {redactions} region(s) redacted" : "") + (dropped > 0 ? $", {dropped} dropped by redaction" : "");
+        Console.WriteLine($"{Prefix(job.Decision)} -> {records.Count} window(s): {savedCount} saved, {duplicates} unchanged{extra} (capture {job.CaptureMs} ms, process {stopwatch.ElapsedMilliseconds} ms)");
     }
 
     private static void DisposeImages(CaptureResult capture)

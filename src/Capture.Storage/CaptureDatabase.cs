@@ -17,7 +17,8 @@ public sealed record CapturedWindowRecord(
     int Height,
     ulong DHash,
     string? FilePath,
-    long? DedupeReferenceId);
+    long? DedupeReferenceId,
+    int RedactionCount = 0);
 
 /// <summary>Summary of a stored capture for display.</summary>
 public sealed record CaptureSummary(DateTimeOffset Timestamp, string Trigger, int Windows, int SavedImages);
@@ -103,14 +104,25 @@ public sealed class CaptureDatabase : IDisposable
                 height           INTEGER NOT NULL,
                 dhash            INTEGER NOT NULL,
                 file_path        TEXT,               -- null if deduplicated or removed by retention
-                dedupe_ref_id    INTEGER REFERENCES capture_windows(id)
+                dedupe_ref_id    INTEGER REFERENCES capture_windows(id),
+                redaction_count  INTEGER NOT NULL DEFAULT 0   -- regions blacked out by redaction
             );
             CREATE INDEX IF NOT EXISTS ix_capture_windows_capture ON capture_windows(capture_id);
 
             DROP TABLE IF EXISTS capture_decisions;  -- M2 placeholder
             UPDATE events SET type = 'other' WHERE type = 'non_work';  -- renamed
-            PRAGMA user_version=2;
+            PRAGMA user_version=3;
             """);
+
+        // Databases created before redaction existed lack this column.
+        using (SqliteCommand check = _connection.CreateCommand())
+        {
+            check.CommandText = "SELECT COUNT(*) FROM pragma_table_info('capture_windows') WHERE name = 'redaction_count';";
+            if ((long)check.ExecuteScalar()! == 0)
+            {
+                Execute("ALTER TABLE capture_windows ADD COLUMN redaction_count INTEGER NOT NULL DEFAULT 0;");
+            }
+        }
     }
 
     public void InsertEvent(ActivityEvent e)
@@ -170,12 +182,12 @@ public sealed class CaptureDatabase : IDisposable
                         capture_id, window_handle, process_name, window_title,
                         left, top, right, bottom,
                         visible_left, visible_top, visible_right, visible_bottom, visible_fraction,
-                        z_index, is_focused, monitor_id, width, height, dhash, file_path, dedupe_ref_id)
+                        z_index, is_focused, monitor_id, width, height, dhash, file_path, dedupe_ref_id, redaction_count)
                     VALUES (
                         $capture, $handle, $process, $title,
                         $left, $top, $right, $bottom,
                         $vleft, $vtop, $vright, $vbottom, $vfraction,
-                        $z, $focused, $monitor, $width, $height, $dhash, $path, $ref)
+                        $z, $focused, $monitor, $width, $height, $dhash, $path, $ref, $redactions)
                     RETURNING id;
                     """;
                 command.Parameters.AddWithValue("$capture", captureId);
@@ -199,6 +211,7 @@ public sealed class CaptureDatabase : IDisposable
                 command.Parameters.AddWithValue("$dhash", unchecked((long)window.DHash));
                 command.Parameters.AddWithValue("$path", (object?)window.FilePath ?? DBNull.Value);
                 command.Parameters.AddWithValue("$ref", (object?)window.DedupeReferenceId ?? DBNull.Value);
+                command.Parameters.AddWithValue("$redactions", window.RedactionCount);
                 ids.Add((long)command.ExecuteScalar()!);
             }
 

@@ -40,7 +40,7 @@ public sealed class PassThroughRedactor : IRedactor
     public ValueTask<RedactionResult> RedactAsync(RawWindowImage image, CancellationToken cancellationToken)
     {
         var redacted = new RedactedWindowImage(
-            image.Timestamp, image.Placement, image.Width, image.Height, image.DetachPixels());
+            image.Timestamp, image.Placement, image.Width, image.Height, image.DetachPixels(), redactionCount: 0);
         return ValueTask.FromResult(RedactionResult.Redacted(redacted));
     }
 }
