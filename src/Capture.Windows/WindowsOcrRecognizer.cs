@@ -118,16 +118,26 @@ public sealed class WindowsOcrRecognizer : ITextRecognizer
         byte[] target = new byte[scaledWidth * scaledHeight];
         try
         {
-            // Fixed point with 8 fractional bits.
-            int stepX = (int)((long)(width - 1) * 256 / Math.Max(1, scaledWidth - 1));
-            int stepY = (int)((long)(height - 1) * 256 / Math.Max(1, scaledHeight - 1));
+            // Target pixel x shows source position x / scale, exactly: word positions are later
+            // divided by the same scale, so any drift here would move the redaction boxes.
+            // The source column and its blend weight (0..256) are worked out once per column.
+            int[] columnIndex = new int[scaledWidth];
+            int[] columnWeight = new int[scaledWidth];
+            for (int x = 0; x < scaledWidth; x++)
+            {
+                double position = Math.Min(x / scale, width - 1);
+                columnIndex[x] = (int)position;
+                columnWeight[x] = (int)((position - columnIndex[x]) * 256);
+            }
+
             for (int y = 0; y < scaledHeight; y++)
             {
-                int sy = y * stepY, y0 = sy >> 8, fy = sy & 255, y1 = Math.Min(y0 + 1, height - 1);
+                double position = Math.Min(y / scale, height - 1);
+                int y0 = (int)position, fy = (int)((position - y0) * 256), y1 = Math.Min(y0 + 1, height - 1);
                 int row0 = y0 * width, row1 = y1 * width, targetRow = y * scaledWidth;
                 for (int x = 0; x < scaledWidth; x++)
                 {
-                    int sx = x * stepX, x0 = sx >> 8, fx = sx & 255, x1 = Math.Min(x0 + 1, width - 1);
+                    int x0 = columnIndex[x], fx = columnWeight[x], x1 = Math.Min(x0 + 1, width - 1);
                     int top = source[row0 + x0] * (256 - fx) + source[row0 + x1] * fx;
                     int bottom = source[row1 + x0] * (256 - fx) + source[row1 + x1] * fx;
                     target[targetRow + x] = (byte)((top * (256 - fy) + bottom * fy) >> 16);

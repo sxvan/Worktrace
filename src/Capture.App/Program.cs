@@ -230,16 +230,18 @@ internal static class Program
 
         foreach (var group in report.Cases.GroupBy(c => (c.Theme, c.FontSize)))
         {
-            Console.WriteLine($"{group.Key.Theme} theme, {group.Key.FontSize} pt: {group.Count(c => c.Found)} of {group.Count()} fake secrets found");
-            foreach (RedactionSelfTest.Case missed in group.Where(c => !c.Found && verbose))
+            string bySide = string.Join(", ", group.GroupBy(c => c.Side)
+                .Select(side => $"{side.Key} side {side.Count(c => c.Covered)}/{side.Count(c => c.Found)}"));
+            Console.WriteLine($"{group.Key.Theme} theme, {group.Key.FontSize} pt: {group.Count(c => c.Found)} of {group.Count()} fake secrets found; box covers the secret: {bySide}");
+            foreach (RedactionSelfTest.Case problem in group.Where(c => !c.Covered && verbose))
             {
-                Console.WriteLine($"  MISSED  {missed.Line}");
-                Console.WriteLine($"  read as {missed.RecognizedAs}");
+                Console.WriteLine($"  {(problem.Found ? "MISPLACED" : "MISSED   ")} ({problem.Side}) {problem.Line}");
+                Console.WriteLine($"  read as   {problem.RecognizedAs}");
             }
         }
         Console.WriteLine($"False positives on harmless lines: {report.FalsePositives}");
         Console.WriteLine($"Text recognition and detection: {report.MillisecondsPerImage} ms per {report.Width}x{report.Height} image ({recognizer.LanguageTag}, enlarged {scale}x)");
-        return report.Cases.All(c => c.Found) ? 0 : 5;
+        return report.Cases.All(c => c.Covered) ? 0 : 5;
     }
 
     /// <summary>Reports a startup problem: on the terminal if there is one, otherwise in a message box.</summary>
