@@ -22,3 +22,6 @@ GetDpiForMonitor
 OpenProcess
 QueryFullProcessImageName
 CloseHandle
+IUIAutomation
+CUIAutomation
+IUIAutomationElement

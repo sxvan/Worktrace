@@ -175,6 +175,7 @@ try
         database,
         capturer,
         pipeline,
+        config.SkipPasswordFields ? new PasswordFieldDetector() : null,
         TimeProvider.System);
     Console.WriteLine($"Captures: {paths.CapturesFolder}");
     await coordinator.RunAsync(signals.Reader, shutdown.Token);
