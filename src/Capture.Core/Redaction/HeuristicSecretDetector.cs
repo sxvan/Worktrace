@@ -53,7 +53,7 @@ public sealed class HeuristicSecretDetector : ISecretDetector
     /// altogether, so plain prose ("password reset") also loses a word now and then.
     /// </summary>
     private static readonly Regex PasswordAssignment = new(
-        @"(?<kind>password|passwd|pwd|passphrase|secret)[\w.\-]*[\s""'`:=.>\-]{1,8}(?<value>[^\s""',;]{4,})",
+        @"(?<kind>password|passwd|pwd|passphrase|secret)[\w.\-]*(?<sep>[\s""'`:=.>\-]{1,8})(?<value>[^\s""',;]{4,})",
         Options | RegexOptions.IgnoreCase, Timeout);
 
     /// <summary>name = value for names like token or api_key. Needs a separator, and the value is checked further.</summary>
@@ -154,7 +154,16 @@ public sealed class HeuristicSecretDetector : ISecretDetector
                     foreach (Match match in assignment.Matches(text))
                     {
                         Group value = match.Groups["value"];
-                        if (IsSecretValue(match.Groups["kind"].Value, value.Value))
+                        if (!IsSecretValue(match.Groups["kind"].Value, value.Value))
+                        {
+                            continue;
+                        }
+
+                        // Without "=" or ":" this may just be prose ("the password-field check",
+                        // "secret santa"). Then only a value that looks like a password counts.
+                        Group separator = match.Groups["sep"];
+                        bool explicitSeparator = !separator.Success || separator.Value.Contains('=') || separator.Value.Contains(':');
+                        if (explicitSeparator || LooksLikePassword(value.Value))
                         {
                             Add(regions, line, wordStarts, value.Index, value.Length);
                         }
@@ -175,8 +184,13 @@ public sealed class HeuristicSecretDetector : ISecretDetector
 
                 if (PasswordInProse.Match(text) is { Success: true } prose)
                 {
+                    // "the password is stored as a hash" is ordinary prose; "the password is Tr0ub4dor&3" is not.
                     Group value = prose.Groups["value"];
-                    Add(regions, line, wordStarts, value.Index, value.Length);
+                    string firstWord = value.Value.Split(' ', 2)[0];
+                    if (prose.Value.Contains(':') || LooksLikePassword(firstWord))
+                    {
+                        Add(regions, line, wordStarts, value.Index, value.Length);
+                    }
                 }
 
                 MatchCollection urls = UrlCredentials.Matches(text);
@@ -228,6 +242,21 @@ public sealed class HeuristicSecretDetector : ISecretDetector
         bool hasDigit = value.Any(char.IsAsciiDigit);
         bool mixedCase = value.Any(char.IsAsciiLetterLower) && value.Any(char.IsAsciiLetterUpper);
         return value.Length >= 8 && (hasDigit || mixedCase) && !value.All(char.IsAsciiDigit);
+    }
+
+    /// <summary>A digit, a symbol, or mixed case inside the word: more likely a password than an English word.</summary>
+    private static bool LooksLikePassword(string value)
+    {
+        value = value.Trim('"', '\'', '`', '.', ',', ';', ':', '!', '?', '(', ')');
+        if (value.Length < 4)
+        {
+            return false;
+        }
+        bool hasDigit = value.Any(char.IsAsciiDigit);
+        bool hasSymbol = value.Any(c => !char.IsLetterOrDigit(c) && c != '-' && c != '\'');
+        // Upper case after the first letter ("hunterTwo"), not a capitalised word ("Reset").
+        bool innerUpper = value.Skip(1).Any(char.IsAsciiLetterUpper) && value.Any(char.IsAsciiLetterLower);
+        return hasDigit || hasSymbol || innerUpper;
     }
 
     /// <summary>Long strings mixing upper case, lower case and digits with high entropy: keys without a known prefix.</summary>

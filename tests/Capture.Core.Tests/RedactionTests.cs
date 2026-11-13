@@ -138,9 +138,32 @@ public class RedactionTests
     }
 
     [Fact]
-    public void Passphrase_in_prose_is_hidden_to_the_end_of_the_row()
+    public void Password_stated_in_prose_is_hidden_to_the_end_of_the_row()
     {
-        Assert.Equal(["correct", "horse", "battery", "staple"], Hidden("the wifi password is correct horse battery staple"));
+        Assert.Equal(["Tr0ub4dor&3", "for", "now"], Hidden("the wifi password is Tr0ub4dor&3 for now"));
+        Assert.Equal(["correct", "horse", "battery"], Hidden("the wifi password is: correct horse battery"));
+    }
+
+    [Theory]
+    [InlineData("whether the saved images show redaction and the password-field check works")]
+    [InlineData("the password is stored as a salted hash")]
+    [InlineData("secret santa list for the office party")]
+    [InlineData("Change your password every 90 days.")]
+    [InlineData("Forgot your password? Reset it here.")]
+    [InlineData("the password manager opens in a separate window")]
+    [InlineData("a secret Santa gift")]
+    public void Prose_that_mentions_passwords_is_left_alone(string line)
+    {
+        Assert.Empty(Find(line));
+    }
+
+    [Theory]
+    [InlineData("password hunter2", "hunter2")]            // separator lost, but the value has a digit
+    [InlineData("password Som#mer", "Som#mer")]            // a symbol inside the word
+    [InlineData("password hunterTwo", "hunterTwo")]        // inner capital
+    public void Value_without_separator_is_hidden_only_if_it_looks_like_a_password(string line, string expectedHiddenWord)
+    {
+        Assert.Contains(expectedHiddenWord, Hidden(line));
     }
 
     [Theory]
