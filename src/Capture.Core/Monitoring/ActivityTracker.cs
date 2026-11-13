@@ -14,10 +14,19 @@ public sealed class ActivityTracker(TimeSpan idleTimeout)
     private WindowSnapshot? _current;
     private WindowSnapshot? _lastLogged;
 
+    private DateTimeOffset? _pausedUntil;
+
     public bool IsIdle => _idle;
 
-    /// <summary>Locked or asleep: nothing is observed or captured.</summary>
-    public bool IsSuspended => _locked || _asleep;
+    /// <summary>Locked, asleep or paused by the user: nothing is logged or captured.</summary>
+    public bool IsSuspended => _locked || _asleep || IsPaused;
+
+    public bool IsLockedOrAsleep => _locked || _asleep;
+
+    public bool IsPaused => _pausedUntil is not null;
+
+    /// <summary>When the pause ends by itself; <see cref="DateTimeOffset.MaxValue"/> means "until resumed". Null if not paused.</summary>
+    public DateTimeOffset? PausedUntil => _pausedUntil;
 
     /// <summary>The current foreground window as far as it may be known, or null before the first signal.</summary>
     public WindowSnapshot? CurrentWindow => _current;
@@ -75,6 +84,25 @@ public sealed class ActivityTracker(TimeSpan idleTimeout)
                 {
                     _locked = false;
                     events.Add(new ActivityEvent(s.Timestamp, EventType.Unlock));
+                    RelogCurrentWindow(events, s.Timestamp);
+                }
+                break;
+
+            case PauseRequested s:
+                // Pausing again while paused only changes when the pause ends.
+                bool wasPaused = IsPaused;
+                _pausedUntil = s.Until ?? DateTimeOffset.MaxValue;
+                if (!wasPaused)
+                {
+                    events.Add(new ActivityEvent(s.Timestamp, EventType.Paused));
+                }
+                break;
+
+            case ResumeRequested s:
+                if (IsPaused)
+                {
+                    _pausedUntil = null;
+                    events.Add(new ActivityEvent(s.Timestamp, EventType.Resumed));
                     RelogCurrentWindow(events, s.Timestamp);
                 }
                 break;

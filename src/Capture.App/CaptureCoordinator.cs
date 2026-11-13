@@ -11,12 +11,32 @@ using ActivityEvent = Capture.Core.Monitoring.ActivityEvent;
 
 namespace Capture.App;
 
+/// <summary>What the tray icon shows.</summary>
+public enum CaptureState
+{
+    /// <summary>Active, and an allowed window is being captured.</summary>
+    Capturing,
+
+    /// <summary>No input for a while.</summary>
+    Idle,
+
+    /// <summary>Paused by the user.</summary>
+    Paused,
+
+    /// <summary>Nothing to capture: no allowed window is visible, or the session is locked or asleep.</summary>
+    NotCapturing,
+}
+
+/// <param name="PausedUntil">End of a timed pause; null if not paused or paused until resumed.</param>
+public sealed record CaptureStatus(CaptureState State, DateTimeOffset? PausedUntil);
+
 /// <summary>
 /// The single consumer of monitor signals: stores events, drives the trigger engine, captures on
 /// its decisions and hands the result to the <see cref="CapturePipeline"/>. Runs off the monitor
 /// thread, and leaves encoding to the pipeline thread, so event handling is never held up.
 /// </summary>
 public sealed class CaptureCoordinator(
+    Channel<MonitorSignal> signals,
     ActivityTracker tracker,
     CaptureTriggerEngine triggers,
     CaptureDatabase database,
@@ -26,15 +46,39 @@ public sealed class CaptureCoordinator(
     TimeProvider time)
 {
     private bool _lastCaptureFoundNothing;
+    private CaptureStatus _status = new(CaptureState.Capturing, null);
 
-    public async Task RunAsync(ChannelReader<MonitorSignal> signals, CancellationToken shutdown)
+    /// <summary>Raised on the coordinator's thread whenever the status changes.</summary>
+    public event Action<CaptureStatus>? StatusChanged;
+
+    public CaptureStatus Status => _status;
+
+    /// <summary>Pauses recording. Safe to call from any thread.</summary>
+    /// <param name="duration">Null pauses until <see cref="Resume"/> is called.</param>
+    public void Pause(TimeSpan? duration)
+    {
+        DateTimeOffset now = time.GetUtcNow();
+        signals.Writer.TryWrite(new PauseRequested(now, duration is { } d ? now + d : null));
+    }
+
+    /// <summary>Ends a pause. Safe to call from any thread.</summary>
+    public void Resume() => signals.Writer.TryWrite(new ResumeRequested(time.GetUtcNow()));
+
+    public async Task RunAsync(CancellationToken shutdown)
     {
         while (!shutdown.IsCancellationRequested)
         {
-            MonitorSignal? signal = await WaitForSignalOrDueTimeAsync(signals, shutdown);
+            MonitorSignal? signal = await WaitForSignalOrDueTimeAsync(shutdown);
             if (signal is not null)
             {
                 Handle(signal);
+            }
+
+            // A timed pause that has run out ends here.
+            DateTimeOffset now = time.GetUtcNow();
+            if (tracker.PausedUntil is { } until && now >= until)
+            {
+                Handle(new ResumeRequested(now));
             }
 
             if (triggers.Poll(time.GetUtcNow()) is { } decision)
@@ -53,6 +97,8 @@ public sealed class CaptureCoordinator(
                     Console.WriteLine($"{CapturePipeline.Prefix(decision)} -> failed ({ex.GetType().Name})");
                 }
             }
+
+            PublishStatus();
         }
     }
 
@@ -121,15 +167,46 @@ public sealed class CaptureCoordinator(
         }
     }
 
-    /// <summary>Returns the next signal, or null once the trigger engine's next due time has passed.</summary>
-    private async Task<MonitorSignal?> WaitForSignalOrDueTimeAsync(ChannelReader<MonitorSignal> signals, CancellationToken shutdown)
+    private void PublishStatus()
     {
-        if (signals.TryRead(out MonitorSignal? ready))
+        CaptureState state =
+            tracker.IsPaused ? CaptureState.Paused
+            : tracker.IsLockedOrAsleep ? CaptureState.NotCapturing
+            : tracker.IsIdle ? CaptureState.Idle
+            : _lastCaptureFoundNothing ? CaptureState.NotCapturing
+            : CaptureState.Capturing;
+
+        DateTimeOffset? until = tracker.PausedUntil is { } u && u != DateTimeOffset.MaxValue ? u : null;
+        var status = new CaptureStatus(state, until);
+        if (status != _status)
+        {
+            _status = status;
+            try
+            {
+                StatusChanged?.Invoke(status);
+            }
+            catch (Exception ex)
+            {
+                Log.Error("Status handler failed: {ErrorType}", ex.GetType().Name);
+            }
+        }
+    }
+
+    /// <summary>Returns the next signal, or null once the next due time (capture or end of pause) has passed.</summary>
+    private async Task<MonitorSignal?> WaitForSignalOrDueTimeAsync(CancellationToken shutdown)
+    {
+        if (signals.Reader.TryRead(out MonitorSignal? ready))
         {
             return ready;
         }
 
-        TimeSpan? wait = triggers.NextDue - time.GetUtcNow();
+        DateTimeOffset? due = triggers.NextDue;
+        if (tracker.PausedUntil is { } pauseEnd && pauseEnd != DateTimeOffset.MaxValue && (due is null || pauseEnd < due))
+        {
+            due = pauseEnd;
+        }
+
+        TimeSpan? wait = due - time.GetUtcNow();
         if (wait <= TimeSpan.Zero)
         {
             return null;
@@ -138,12 +215,13 @@ public sealed class CaptureCoordinator(
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(shutdown);
         if (wait is { } delay)
         {
-            timeout.CancelAfter(delay);
+            // CancelAfter cannot take more than about 49 days.
+            timeout.CancelAfter(delay < TimeSpan.FromDays(1) ? delay : TimeSpan.FromDays(1));
         }
 
         try
         {
-            return await signals.ReadAsync(timeout.Token);
+            return await signals.Reader.ReadAsync(timeout.Token);
         }
         catch (OperationCanceledException)
         {

@@ -171,4 +171,64 @@ public class ActivityTrackerTests
 
         Assert.Equal(new ActivityEvent(At(3), EventType.TitleChange, "msedge.exe", "Mail", 7), e);
     }
+
+    // ---- Pause ----
+
+    [Fact]
+    public void Pause_and_resume_are_logged_and_the_foreground_is_restated()
+    {
+        var tracker = Tracker();
+        tracker.Process(new ForegroundChanged(At(0), Editor));
+
+        Assert.Equal(new ActivityEvent(At(10), EventType.Paused), Assert.Single(tracker.Process(new PauseRequested(At(10), At(910)))));
+        Assert.True(tracker.IsPaused);
+        Assert.True(tracker.IsSuspended);
+        Assert.Equal(At(910), tracker.PausedUntil);
+
+        var events = tracker.Process(new ResumeRequested(At(60)));
+
+        Assert.Equal([EventType.Resumed, EventType.Foreground], events.Select(e => e.Type));
+        Assert.False(tracker.IsPaused);
+        Assert.Null(tracker.PausedUntil);
+    }
+
+    [Fact]
+    public void Nothing_is_logged_while_paused()
+    {
+        var tracker = Tracker();
+        tracker.Process(new PauseRequested(At(0), null));
+
+        Assert.Equal(DateTimeOffset.MaxValue, tracker.PausedUntil);
+        Assert.Empty(tracker.Process(new ForegroundChanged(At(1), Editor)));
+        Assert.Empty(tracker.Process(new TitleChanged(At(2), EditorOtherFile)));
+        Assert.Empty(tracker.Process(new InputTick(At(400), TimeSpan.FromSeconds(399))));
+    }
+
+    [Fact]
+    public void Pausing_again_changes_the_end_without_a_second_event()
+    {
+        var tracker = Tracker();
+        tracker.Process(new PauseRequested(At(0), At(900)));
+
+        Assert.Empty(tracker.Process(new PauseRequested(At(5), null)));
+        Assert.Equal(DateTimeOffset.MaxValue, tracker.PausedUntil);
+    }
+
+    [Fact]
+    public void Resume_without_a_pause_does_nothing()
+    {
+        Assert.Empty(Tracker().Process(new ResumeRequested(At(0))));
+    }
+
+    [Fact]
+    public void Resume_while_locked_does_not_restate_the_foreground()
+    {
+        var tracker = Tracker();
+        tracker.Process(new ForegroundChanged(At(0), Editor));
+        tracker.Process(new PauseRequested(At(1), At(100)));
+        tracker.Process(new SessionLocked(At(2)));
+
+        Assert.Equal([EventType.Resumed], tracker.Process(new ResumeRequested(At(100))).Select(e => e.Type));
+        Assert.True(tracker.IsSuspended);
+    }
 }

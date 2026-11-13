@@ -1,12 +1,23 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <!-- Console host until the tray app arrives in M5. -->
-    <OutputType>Exe</OutputType>
+    <!-- A tray application: no console window, no main window. -->
+    <OutputType>WinExe</OutputType>
     <TargetFramework>net10.0-windows10.0.22621.0</TargetFramework>
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <UseWindowsForms>true</UseWindowsForms>
     <AssemblyName>TimeCapture</AssemblyName>
     <RootNamespace>Capture.App</RootNamespace>
     <ApplicationManifest>app.manifest</ApplicationManifest>
+    <!-- Per-monitor DPI awareness is declared in the manifest on purpose: it must hold before any code runs. -->
+    <NoWarn>$(NoWarn);WFO0003</NoWarn>
+
+    <!-- dotnet publish -c Release produces one self-contained TimeCapture.exe. Native libraries
+         (image encoder, SQLite) are packed inside and unpacked to a per-user temp folder at start. -->
+    <SelfContained>true</SelfContained>
+    <PublishSingleFile>true</PublishSingleFile>
+    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+    <DebugType>embedded</DebugType>
+    <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\Capture.Core\Capture.Core.csproj" />

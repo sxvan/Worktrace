@@ -48,3 +48,9 @@ public sealed record SessionUnlocked(DateTimeOffset Timestamp) : MonitorSignal(T
 public sealed record SystemSuspending(DateTimeOffset Timestamp) : MonitorSignal(Timestamp);
 
 public sealed record SystemResumed(DateTimeOffset Timestamp) : MonitorSignal(Timestamp);
+
+/// <summary>The user paused recording. <paramref name="Until"/> is null for "until resumed".</summary>
+public sealed record PauseRequested(DateTimeOffset Timestamp, DateTimeOffset? Until) : MonitorSignal(Timestamp);
+
+/// <summary>The user resumed recording, or a timed pause ran out.</summary>
+public sealed record ResumeRequested(DateTimeOffset Timestamp) : MonitorSignal(Timestamp);
