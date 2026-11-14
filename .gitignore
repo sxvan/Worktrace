@@ -3,6 +3,7 @@ obj/
 .vs/
 *.user
 publish/
+TestResults/
 # Raw output of the removed M0 prototype, if still present (never commit)
 m0-output/
 # Local capture data (screenshots, database, logs): never commit
