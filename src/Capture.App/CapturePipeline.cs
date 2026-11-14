@@ -3,7 +3,6 @@ using System.Diagnostics;
 using Capture.Core.Pipeline;
 using Capture.Core.Triggers;
 using Capture.Storage;
-using Serilog;
 
 namespace Capture.App;
 
@@ -59,8 +58,7 @@ public sealed class CapturePipeline : IDisposable
         if (!queued)
         {
             DisposeImages(capture);
-            Log.Warning("Capture dropped: encoding queue is full");
-            Console.WriteLine($"{Prefix(decision)} -> dropped (encoding is behind)");
+            CaptureReporter.DroppedBecauseQueueIsFull(decision);
         }
     }
 
@@ -89,8 +87,7 @@ public sealed class CapturePipeline : IDisposable
                 catch (Exception ex)
                 {
                     // Fail closed: nothing of this capture is kept.
-                    Log.Error("Capture processing failed: {ErrorType} 0x{HResult:X8}", ex.GetType().Name, ex.HResult);
-                    Console.WriteLine($"{Prefix(job.Decision)} -> failed ({ex.GetType().Name})");
+                    CaptureReporter.Failed(job.Decision, "Capture processing", ex);
                 }
                 finally
                 {
@@ -146,7 +143,7 @@ public sealed class CapturePipeline : IDisposable
                 if (redaction.Image is null)
                 {
                     dropped++;
-                    Log.Warning("Window image dropped by redaction: {Reason}", redaction.DropReason);
+                    CaptureReporter.WindowDroppedByRedaction(redaction.DropReason);
                     continue;
                 }
 
@@ -165,7 +162,7 @@ public sealed class CapturePipeline : IDisposable
             {
                 if (dropped > 0)
                 {
-                    Console.WriteLine($"{Prefix(job.Decision)} -> {dropped} window(s) dropped by redaction, nothing saved");
+                    CaptureReporter.NothingSaved(job.Decision, dropped);
                 }
                 return;
             }
@@ -199,11 +196,8 @@ public sealed class CapturePipeline : IDisposable
             throw;
         }
 
-        int savedCount = writtenFiles.Count, duplicates = records.Count - savedCount;
-        Log.Information("Capture ({Trigger}): {Windows} window(s), {Saved} saved, {Duplicates} unchanged, {Redactions} region(s) redacted, {Dropped} dropped, capture {CaptureMs} ms, processing {ProcessMs} ms",
-            job.Decision.Trigger.ToDbName(), records.Count, savedCount, duplicates, redactions, dropped, job.CaptureMs, stopwatch.ElapsedMilliseconds);
-        string extra = (redactions > 0 ? $", {redactions} region(s) redacted" : "") + (dropped > 0 ? $", {dropped} dropped by redaction" : "");
-        Console.WriteLine($"{Prefix(job.Decision)} -> {records.Count} window(s): {savedCount} saved, {duplicates} unchanged{extra} (capture {job.CaptureMs} ms, process {stopwatch.ElapsedMilliseconds} ms)");
+        CaptureReporter.Stored(
+            job.Decision, records.Count, writtenFiles.Count, redactions, dropped, job.CaptureMs, stopwatch.ElapsedMilliseconds);
     }
 
     private static void DisposeImages(CaptureResult capture)
@@ -213,7 +207,4 @@ public sealed class CapturePipeline : IDisposable
             image.Dispose();
         }
     }
-
-    internal static string Prefix(CaptureDecision decision) =>
-        $"{decision.Timestamp.ToLocalTime():HH:mm:ss}  >> capture   {decision.Trigger.ToDbName(),-13}";
 }

@@ -93,8 +93,7 @@ public sealed class CaptureCoordinator(
                 catch (Exception ex)
                 {
                     // Fail closed: whatever went wrong, this capture is gone and nothing was saved.
-                    Log.Error("Capture failed: {ErrorType} 0x{HResult:X8}", ex.GetType().Name, ex.HResult);
-                    Console.WriteLine($"{CapturePipeline.Prefix(decision)} -> failed ({ex.GetType().Name})");
+                    CaptureReporter.Failed(decision, "Capture", ex);
                 }
             }
 
@@ -112,8 +111,7 @@ public sealed class CaptureCoordinator(
             if (focus != FocusCheck.NotPassword)
             {
                 string why = focus == FocusCheck.Password ? "password field has focus" : "could not check for a password field";
-                Log.Information("Capture ({Trigger}) skipped: {Reason}", decision.Trigger.ToDbName(), why);
-                Console.WriteLine($"{CapturePipeline.Prefix(decision)} -> skipped ({why})");
+                CaptureReporter.Skipped(decision, why);
                 return;
             }
         }
@@ -129,13 +127,11 @@ public sealed class CaptureCoordinator(
                     _lastCaptureFoundNothing = true;
                     database.InsertEvent(new ActivityEvent(decision.Timestamp, EventType.Other));
                 }
-                Log.Information("Capture ({Trigger}): no capturable window visible", decision.Trigger.ToDbName());
-                Console.WriteLine($"{CapturePipeline.Prefix(decision)} -> nothing to capture (no capturable window visible)");
+                CaptureReporter.NothingToCapture(decision);
                 break;
 
             case CaptureOutcome.Discarded:
-                Log.Warning("Capture ({Trigger}) discarded: {Reason}", decision.Trigger.ToDbName(), result.Reason);
-                Console.WriteLine($"{CapturePipeline.Prefix(decision)} -> discarded ({result.Reason})");
+                CaptureReporter.Discarded(decision, result.Reason);
                 break;
 
             case CaptureOutcome.Captured:
@@ -150,8 +146,7 @@ public sealed class CaptureCoordinator(
         foreach (ActivityEvent e in tracker.Process(signal))
         {
             database.InsertEvent(e);
-            Log.Information("Event {Type}", e.Type.ToDbName());
-            Console.WriteLine($"{e.Timestamp.ToLocalTime():HH:mm:ss}  {e.Type.ToDbName(),-12}  {e.ProcessName}");
+            CaptureReporter.Event(e);
 
             if (e.Type is EventType.Foreground or EventType.TitleChange or EventType.Other)
             {
