@@ -54,6 +54,11 @@ internal static class CaptureHost
     private static int RunTray(AppPaths paths, CaptureConfig config)
     {
         Log.Information("Starting. Storage root: {Root}. Rules: {RuleCount}", paths.Root, config.Rules.Count);
+        if (config.Rules.Count == 0)
+        {
+            Log.Warning("config.json has no rules; nothing will be recorded");
+            Console.WriteLine($"Note: no rules in {paths.ConfigFile}; nothing will be recorded until you add some.");
+        }
 
         IRedactor? redactor = CreateRedactor(config);
         if (redactor is null)

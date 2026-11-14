@@ -26,16 +26,10 @@ public sealed class CaptureConfig
 
     /// <summary>
     /// What may be recorded, per application. Windows that match no rule are logged only as "other",
-    /// without process name or title, and are never captured.
+    /// without process name or title, and are never captured. There are no built-in rules: until
+    /// config.json lists some, nothing is recorded.
     /// </summary>
-    public List<WindowRule> Rules { get; set; } =
-    [
-        new() { Process = "Code.exe" },
-        new() { Process = "WindowsTerminal.exe" },
-        new() { Process = "msedge.exe", Mode = "log", LogTitles = true },
-        new() { Process = "chrome.exe", Mode = "log", LogTitles = true },
-        new() { Process = "firefox.exe", Mode = "log", LogTitles = true },
-    ];
+    public List<WindowRule> Rules { get; set; } = [];
 
     public int RetentionDays { get; set; } = 14;
 
