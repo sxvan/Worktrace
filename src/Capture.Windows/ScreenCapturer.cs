@@ -125,8 +125,8 @@ public sealed class ScreenCapturer
                 else
                 {
                     // Black canvas in the window's size; only the visible parts are drawn onto it.
-                    pixels = new byte[checked(bounds.Width * bounds.Height * Compositor.BytesPerPixel)];
-                    Compositor.Blit(pixels, bounds, frame.Pixels, frame.Width, frame.Height, frame.Origin, placement.VisibleRects);
+                    pixels = new byte[checked(bounds.Width * bounds.Height * WindowPixels.BytesPerPixel)];
+                    WindowPixels.CopyVisible(pixels, bounds, frame.Pixels, frame.Width, frame.Height, frame.Origin, placement.VisibleRects);
                 }
                 images.Add(new RawWindowImage(timestamp, placement, bounds.Width, bounds.Height, pixels));
             }
@@ -235,7 +235,7 @@ public sealed class ScreenCapturer
             throw new InvalidOperationException("Captured frame size does not match the window bounds.");
         }
 
-        byte[] pixels = new byte[checked(width * height * Compositor.BytesPerPixel)];
+        byte[] pixels = new byte[checked(width * height * WindowPixels.BytesPerPixel)];
         try
         {
             bitmap.CopyToBuffer(pixels.AsBuffer());

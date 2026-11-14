@@ -3,7 +3,7 @@ using Capture.Core.Geometry;
 
 namespace Capture.Core.Tests;
 
-public class CompositorTests
+public class WindowPixelsTests
 {
     /// <summary>A frame where every pixel's four bytes hold the given value.</summary>
     private static byte[] Solid(int width, int height, byte value)
@@ -26,7 +26,7 @@ public class CompositorTests
         byte[] frame = Solid(60, 30, 200);
         RectInt[] visible = [new(-80, -40, -50, -10)];
 
-        Compositor.Blit(canvas, monitor, frame, 60, 30, (windowBounds.Left, windowBounds.Top), visible);
+        WindowPixels.CopyVisible(canvas, monitor, frame, 60, 30, (windowBounds.Left, windowBounds.Top), visible);
 
         for (int x = monitor.Left; x < monitor.Right; x++)
         {
@@ -53,7 +53,7 @@ public class CompositorTests
             }
         }
 
-        Compositor.Blit(canvas, monitor, frame, 4, 4, (2, 3), [new RectInt(3, 4, 6, 7)]);
+        WindowPixels.CopyVisible(canvas, monitor, frame, 4, 4, (2, 3), [new RectInt(3, 4, 6, 7)]);
 
         Assert.Equal(10 * 1 + 1 + 1, PixelAt(canvas, monitor, 3, 4)); // frame pixel (1,1)
         Assert.Equal(10 * 3 + 3 + 1, PixelAt(canvas, monitor, 5, 6)); // frame pixel (3,3)
@@ -65,7 +65,7 @@ public class CompositorTests
     {
         byte[] canvas = new byte[10 * 10 * 4];
 
-        Assert.Throws<InvalidOperationException>(() => Compositor.Blit(
+        Assert.Throws<InvalidOperationException>(() => WindowPixels.CopyVisible(
             canvas, new RectInt(0, 0, 10, 10), Solid(4, 4, 1), 4, 4, (0, 0), [new RectInt(2, 2, 6, 4)]));
     }
 
@@ -74,16 +74,16 @@ public class CompositorTests
     {
         byte[] canvas = new byte[10 * 10 * 4];
 
-        Assert.Throws<InvalidOperationException>(() => Compositor.Blit(
+        Assert.Throws<InvalidOperationException>(() => WindowPixels.CopyVisible(
             canvas, new RectInt(0, 0, 10, 10), Solid(20, 4, 1), 20, 4, (0, 0), [new RectInt(5, 0, 15, 4)]));
     }
 
     [Fact]
     public void Buffer_size_mismatch_is_rejected()
     {
-        Assert.Throws<ArgumentException>(() => Compositor.Blit(
+        Assert.Throws<ArgumentException>(() => WindowPixels.CopyVisible(
             new byte[16], new RectInt(0, 0, 10, 10), Solid(4, 4, 1), 4, 4, (0, 0), []));
-        Assert.Throws<ArgumentException>(() => Compositor.Blit(
+        Assert.Throws<ArgumentException>(() => WindowPixels.CopyVisible(
             new byte[10 * 10 * 4], new RectInt(0, 0, 10, 10), new byte[8], 4, 4, (0, 0), []));
     }
 }
