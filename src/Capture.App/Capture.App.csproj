@@ -25,6 +25,10 @@
     <ProjectReference Include="..\Capture.Storage\Capture.Storage.csproj" />
   </ItemGroup>
   <ItemGroup>
+    <!-- The configuration lives in the repo and is copied next to the executable, where the app reads it. -->
+    <None Update="config.json" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" ExcludeFromSingleFile="true" />
+  </ItemGroup>
+  <ItemGroup>
     <PackageReference Include="Serilog" Version="4.4.0" />
     <PackageReference Include="Serilog.Sinks.File" Version="7.0.0" />
   </ItemGroup>

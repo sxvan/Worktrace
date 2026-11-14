@@ -9,7 +9,6 @@ public sealed class AppPaths
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-        WriteIndented = true,
         ReadCommentHandling = JsonCommentHandling.Skip,
         AllowTrailingCommas = true,
     };
@@ -20,33 +19,31 @@ public sealed class AppPaths
         Root = root;
     }
 
-    /// <summary>The config file always lives in the default folder, even if the storage root is moved.</summary>
+    /// <summary>
+    /// config.json next to the executable. Its source is src/Capture.App/config.json; the build
+    /// and the publish copy it there.
+    /// </summary>
     public string ConfigFile { get; }
     public string Root { get; }
     public string DatabaseFile => Path.Combine(Root, "capture.db");
     public string CapturesFolder => Path.Combine(Root, "captures");
     public string LogsFolder => Path.Combine(Root, "logs");
 
+    /// <summary>Where the database, captures and logs go when the config names no storage root.</summary>
     public static string DefaultRoot =>
         Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "TimeCapture");
 
-    /// <summary>Loads config.json, creating it with defaults on first run. Throws on an invalid file.</summary>
+    /// <summary>Loads config.json. Throws if the file is missing or invalid.</summary>
     public static (AppPaths Paths, CaptureConfig Config) Load()
     {
-        string configFile = Path.Combine(DefaultRoot, "config.json");
-        CaptureConfig config;
+        string configFile = Path.Combine(AppContext.BaseDirectory, "config.json");
+        if (!File.Exists(configFile))
+        {
+            throw new FileNotFoundException($"{configFile} does not exist.");
+        }
 
-        if (File.Exists(configFile))
-        {
-            config = JsonSerializer.Deserialize<CaptureConfig>(File.ReadAllText(configFile), JsonOptions)
-                     ?? throw new InvalidDataException("config.json is empty.");
-        }
-        else
-        {
-            config = new CaptureConfig();
-            Directory.CreateDirectory(DefaultRoot);
-            File.WriteAllText(configFile, JsonSerializer.Serialize(config, JsonOptions));
-        }
+        CaptureConfig config = JsonSerializer.Deserialize<CaptureConfig>(File.ReadAllText(configFile), JsonOptions)
+                               ?? throw new InvalidDataException("config.json is empty.");
 
         string root = string.IsNullOrWhiteSpace(config.StorageRoot)
             ? DefaultRoot

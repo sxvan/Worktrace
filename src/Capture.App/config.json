@@ -1,0 +1,21 @@
+﻿{
+  "storageRoot": "C:\\Users\\silva\\source\\repos\\open-timesheet\\data",
+  "inputPollIntervalMs": 1000,
+  "windowSwitchDelayMs": 1000,
+  "typingPauseMs": 2000,
+  "fallbackIntervalSeconds": 60,
+  "minCaptureIntervalSeconds": 5,
+  "idleTimeoutSeconds": 180,
+  "rules": [
+    { "process": "*", "mode": "capture" }
+  ],
+  "retentionDays": 14,
+  "imageQuality": 40,
+  "maxImageDimension": 1920,
+  "imageEncoderSpeed": 8,
+  "dedupeThreshold": 4,
+  "redactSecrets": true,
+  "skipPasswordFields": true
+}
+
+
