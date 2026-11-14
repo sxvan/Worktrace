@@ -1,7 +1,4 @@
 <Solution>
-  <Folder Name="/prototype/">
-    <Project Path="prototype/Capture.Prototype/Capture.Prototype.csproj" />
-  </Folder>
   <Folder Name="/src/">
     <Project Path="src/Capture.App/Capture.App.csproj" />
     <Project Path="src/Capture.Core/Capture.Core.csproj" />
