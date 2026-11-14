@@ -20,9 +20,6 @@ public sealed record CapturedWindowRecord(
     long? DedupeReferenceId,
     int RedactionCount = 0);
 
-/// <summary>Summary of a stored capture for display.</summary>
-public sealed record CaptureSummary(DateTimeOffset Timestamp, string Trigger, int Windows, int SavedImages);
-
 /// <summary>
 /// The SQLite database. WAL mode and short transactions, so a crash or kill cannot corrupt it.
 /// All members are safe to call from several threads.
@@ -227,58 +224,6 @@ public sealed class CaptureDatabase : IDisposable
         }
     }
 
-    /// <summary>The most recent events, oldest first.</summary>
-    public IReadOnlyList<ActivityEvent> ReadLastEvents(int count)
-    {
-        lock (_lock)
-        {
-            using SqliteCommand command = _connection.CreateCommand();
-            command.CommandText = """
-                SELECT timestamp, type, process_name, window_title, window_handle
-                FROM events ORDER BY id DESC LIMIT $count;
-                """;
-            command.Parameters.AddWithValue("$count", count);
-
-            var result = new List<ActivityEvent>();
-            using SqliteDataReader reader = command.ExecuteReader();
-            while (reader.Read())
-            {
-                result.Add(new ActivityEvent(
-                    Parse(reader.GetString(0)),
-                    EventTypeNames.FromDbName(reader.GetString(1)),
-                    reader.IsDBNull(2) ? null : reader.GetString(2),
-                    reader.IsDBNull(3) ? null : reader.GetString(3),
-                    reader.IsDBNull(4) ? null : reader.GetInt64(4)));
-            }
-            result.Reverse();
-            return result;
-        }
-    }
-
-    /// <summary>The most recent captures, oldest first.</summary>
-    public IReadOnlyList<CaptureSummary> ReadLastCaptures(int count)
-    {
-        lock (_lock)
-        {
-            using SqliteCommand command = _connection.CreateCommand();
-            command.CommandText = """
-                SELECT c.timestamp, c.trigger, COUNT(w.id), COUNT(w.file_path)
-                FROM captures c LEFT JOIN capture_windows w ON w.capture_id = c.id
-                GROUP BY c.id ORDER BY c.id DESC LIMIT $count;
-                """;
-            command.Parameters.AddWithValue("$count", count);
-
-            var result = new List<CaptureSummary>();
-            using SqliteDataReader reader = command.ExecuteReader();
-            while (reader.Read())
-            {
-                result.Add(new CaptureSummary(Parse(reader.GetString(0)), reader.GetString(1), reader.GetInt32(2), reader.GetInt32(3)));
-            }
-            result.Reverse();
-            return result;
-        }
-    }
-
     public void Dispose()
     {
         lock (_lock)
@@ -317,7 +262,4 @@ public sealed class CaptureDatabase : IDisposable
 
     private static string Format(DateTimeOffset timestamp) =>
         timestamp.UtcDateTime.ToString(TimestampFormat, CultureInfo.InvariantCulture);
-
-    private static DateTimeOffset Parse(string text) =>
-        DateTimeOffset.ParseExact(text, TimestampFormat, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal);
 }
