@@ -6,7 +6,7 @@ using System.Runtime.InteropServices;
 using Capture.Core.Geometry;
 using Capture.Core.Redaction;
 
-namespace Capture.Windows;
+namespace Capture.App.Commands;
 
 /// <summary>
 /// Checks secret redaction on this machine without touching the screen: draws lines of fake code
