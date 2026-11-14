@@ -109,20 +109,8 @@ public sealed class CaptureDatabase : IDisposable
             );
             CREATE INDEX IF NOT EXISTS ix_capture_windows_capture ON capture_windows(capture_id);
 
-            DROP TABLE IF EXISTS capture_decisions;  -- M2 placeholder
-            UPDATE events SET type = 'other' WHERE type = 'non_work';  -- renamed
             PRAGMA user_version=3;
             """);
-
-        // Databases created before redaction existed lack this column.
-        using (SqliteCommand check = _connection.CreateCommand())
-        {
-            check.CommandText = "SELECT COUNT(*) FROM pragma_table_info('capture_windows') WHERE name = 'redaction_count';";
-            if ((long)check.ExecuteScalar()! == 0)
-            {
-                Execute("ALTER TABLE capture_windows ADD COLUMN redaction_count INTEGER NOT NULL DEFAULT 0;");
-            }
-        }
     }
 
     public void InsertEvent(ActivityEvent e)

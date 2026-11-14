@@ -43,6 +43,5 @@ public static class EventTypeNames
     };
 
     public static EventType FromDbName(string name) =>
-        // "non_work" is the earlier name of "other".
-        name == "non_work" ? EventType.Other : Enum.GetValues<EventType>().First(t => t.ToDbName() == name);
+        Enum.GetValues<EventType>().First(t => t.ToDbName() == name);
 }
