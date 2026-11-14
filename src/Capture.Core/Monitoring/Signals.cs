@@ -1,4 +1,4 @@
-using Capture.Core.Allowlist;
+using Capture.Core.Rules;
 
 namespace Capture.Core.Monitoring;
 

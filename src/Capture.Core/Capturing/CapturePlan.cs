@@ -3,7 +3,7 @@ using Capture.Core.Geometry;
 namespace Capture.Core.Capturing;
 
 /// <summary>
-/// A visible top-level window. Process name and title are only present for allowed windows;
+/// A visible top-level window. Process name and title are only present for capturable windows;
 /// for all others just the geometry is kept, because it is needed to work out what they cover.
 /// </summary>
 /// <param name="Bounds">Visible frame bounds (DWM extended frame bounds).</param>
@@ -15,7 +15,7 @@ public sealed record WindowInfo(
     RectInt Bounds,
     RectInt WindowRect,
     int ZIndex,
-    bool IsAllowed,
+    bool IsCapturable,
     bool IsCovering,
     string? ProcessName,
     string? Title);
@@ -24,7 +24,7 @@ public sealed record WindowInfo(
 /// <param name="Scale">Display scaling, 1.0 = 100%.</param>
 public sealed record MonitorInfo(int Index, long Handle, string DeviceName, RectInt Bounds, double Scale, bool IsPrimary);
 
-/// <summary>An allowed window and the parts of it that are actually visible on screen.</summary>
+/// <summary>An capturable window and the parts of it that are actually visible on screen.</summary>
 /// <param name="VisibleRects">Non-overlapping rectangles in virtual-screen coordinates.</param>
 /// <param name="Monitor">The monitor showing the largest visible part of the window.</param>
 public sealed record WindowPlacement(WindowInfo Window, IReadOnlyList<RectInt> VisibleRects, MonitorInfo Monitor)
@@ -38,17 +38,17 @@ public sealed record WindowPlacement(WindowInfo Window, IReadOnlyList<RectInt> V
         VisibleRects.Sum(r => (double)r.Width * r.Height) / ((double)Window.Bounds.Width * Window.Bounds.Height);
 }
 
-/// <summary>What one capture has to record: the allowed windows that are visible, topmost first.</summary>
+/// <summary>What one capture has to record: the capturable windows that are visible, topmost first.</summary>
 public sealed class CapturePlan(IReadOnlyList<MonitorInfo> monitors, IReadOnlyList<WindowPlacement> windows)
 {
     public IReadOnlyList<MonitorInfo> Monitors { get; } = monitors;
 
     public IReadOnlyList<WindowPlacement> Windows { get; } = windows;
 
-    public bool HasAllowedWindows => Windows.Count > 0;
+    public bool HasCapturableWindows => Windows.Count > 0;
 
     /// <summary>
-    /// True if the other plan would produce the same pictures: same monitors, same allowed windows
+    /// True if the other plan would produce the same pictures: same monitors, same capturable windows
     /// in the same order with the same bounds and the same visible parts. Used to detect windows
     /// that moved, resized, changed z-order, appeared or disappeared while capturing.
     /// </summary>
@@ -86,9 +86,9 @@ public sealed class CapturePlan(IReadOnlyList<MonitorInfo> monitors, IReadOnlyLi
 public static class CapturePlanner
 {
     /// <summary>
-    /// Works out which parts of which allowed windows are visible. A window's visible region is its
+    /// Works out which parts of which capturable windows are visible. A window's visible region is its
     /// bounds, clipped to the monitors, minus everything above it in z-order, whether that is
-    /// allowed or not.
+    /// capturable or not.
     /// </summary>
     /// <param name="windows">Visible top-level windows, topmost first.</param>
     public static CapturePlan Plan(IReadOnlyList<WindowInfo> windows, IReadOnlyList<MonitorInfo> monitors)
@@ -98,7 +98,7 @@ public static class CapturePlanner
         for (int i = 0; i < windows.Count; i++)
         {
             WindowInfo window = windows[i];
-            if (!window.IsAllowed || window.Bounds.IsEmpty)
+            if (!window.IsCapturable || window.Bounds.IsEmpty)
             {
                 continue;
             }

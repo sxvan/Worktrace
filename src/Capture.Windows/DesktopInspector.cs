@@ -1,4 +1,4 @@
-using Capture.Core.Allowlist;
+using Capture.Core.Rules;
 using Capture.Core.Capturing;
 using Capture.Core.Geometry;
 using Windows.Win32;
@@ -21,9 +21,9 @@ public static class DesktopInspector
     /// <summary>
     /// Visible top-level windows, topmost first. Minimized, cloaked (other virtual desktops, hidden
     /// UWP windows) and zero-size windows are skipped. Process name and title are only kept for
-    /// allowed windows.
+    /// capturable windows.
     /// </summary>
-    public static unsafe List<WindowInfo> EnumerateWindows(AllowlistMatcher allowlist)
+    public static unsafe List<WindowInfo> EnumerateWindows(WindowRuleMatcher rules)
     {
         var handles = new List<HWND>();
         PInvoke.EnumWindows((hwnd, _) =>
@@ -33,8 +33,8 @@ public static class DesktopInspector
         }, default);
 
         var result = new List<WindowInfo>();
-        // Allowed-ness per handle, so owned windows (menus, dialogs) can inherit it from their owner.
-        var allowedByHandle = new Dictionary<nint, (bool Allowed, string? Process, string? Title)>();
+        // Whether each handle is capturable, so owned windows (menus, dialogs) can inherit it from their owner.
+        var capturableByHandle = new Dictionary<nint, (bool Capturable, string? Process, string? Title)>();
 
         foreach (HWND hwnd in handles)
         {
@@ -65,18 +65,18 @@ public static class DesktopInspector
                 continue;
             }
 
-            var (allowed, process, title) = Classify(hwnd, allowlist, allowedByHandle, depth: 0);
+            var (capturable, process, title) = Classify(hwnd, rules, capturableByHandle, depth: 0);
 
             // Click-through layered windows are overlays (GPU tools, screen annotation, ...) that
-            // hide nothing. Treating them as transparent only affects which parts of allowed
-            // windows count as visible; a non-allowed window is never captured either way.
+            // hide nothing. Treating them as transparent only affects which parts of capturable
+            // windows count as visible; a other window is never captured either way.
             int exStyle = PInvoke.GetWindowLong(hwnd, WINDOW_LONG_PTR_INDEX.GWL_EXSTYLE);
             bool clickThroughOverlay = (exStyle & WS_EX_TRANSPARENT) != 0 && (exStyle & WS_EX_LAYERED) != 0;
 
             result.Add(new WindowInfo(
                 (long)(nint)hwnd, bounds, ToRect(windowRect), result.Count,
-                allowed, IsCovering: allowed || !clickThroughOverlay,
-                allowed ? process : null, allowed ? title : null));
+                capturable, IsCovering: capturable || !clickThroughOverlay,
+                capturable ? process : null, capturable ? title : null));
         }
 
         return result;
@@ -112,18 +112,18 @@ public static class DesktopInspector
     }
 
     /// <summary>
-    /// A window is allowed if a rule matches its own process and title, or if it is owned by an
-    /// allowed window (menus, dropdowns, dialogs).
+    /// A window is capturable if a capture rule matches its own process and title, or if it is owned by an
+    /// capturable window (menus, dropdowns, dialogs).
     /// </summary>
-    private static (bool Allowed, string? Process, string? Title) Classify(
-        HWND hwnd, AllowlistMatcher allowlist, Dictionary<nint, (bool, string?, string?)> cache, int depth)
+    private static (bool Capturable, string? Process, string? Title) Classify(
+        HWND hwnd, WindowRuleMatcher rules, Dictionary<nint, (bool, string?, string?)> cache, int depth)
     {
         if (cache.TryGetValue(hwnd, out var known))
         {
             return known;
         }
 
-        (bool Allowed, string? Process, string? Title) result = (false, null, null);
+        (bool Capturable, string? Process, string? Title) result = (false, null, null);
 
         // Never captured, whatever the rules say: this app's own windows (its tray menu) and the
         // Windows shell (desktop, taskbar). They still count as covering what is behind them.
@@ -135,23 +135,23 @@ public static class DesktopInspector
         }
 
         string? process = GetProcessName(processId);
-        if (process is not null && allowlist.HasRuleFor(process))
+        if (process is not null && rules.HasRuleFor(process))
         {
             string title = GetTitle(hwnd);
-            if (allowlist.IsAllowed(process, title))
+            if (rules.ShouldCapture(process, title))
             {
                 result = (true, process, title);
             }
         }
 
-        if (!result.Allowed && depth < MaxOwnerDepth)
+        if (!result.Capturable && depth < MaxOwnerDepth)
         {
             HWND owner = PInvoke.GetWindow(hwnd, GET_WINDOW_CMD.GW_OWNER);
-            if (owner != default && owner != hwnd && Classify(owner, allowlist, cache, depth + 1).Allowed)
+            if (owner != default && owner != hwnd && Classify(owner, rules, cache, depth + 1).Capturable)
             {
                 string title = GetTitle(hwnd);
                 // The owner rule never overrides the private-window rule.
-                if (process is not null && !AllowlistMatcher.IsPrivateWindowTitle(title))
+                if (process is not null && !WindowRuleMatcher.IsPrivateWindowTitle(title))
                 {
                     result = (true, process, title);
                 }
@@ -196,7 +196,7 @@ public static class DesktopInspector
         HANDLE process = PInvoke.OpenProcess(PROCESS_ACCESS_RIGHTS.PROCESS_QUERY_LIMITED_INFORMATION, false, processId);
         if (process == default)
         {
-            return null; // gone or not accessible: treated as not allowed
+            return null; // gone or not accessible: treated as not capturable
         }
 
         try

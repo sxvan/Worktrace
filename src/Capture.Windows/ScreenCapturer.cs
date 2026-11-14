@@ -1,6 +1,6 @@
 using System.Runtime.InteropServices;
 using System.Runtime.InteropServices.WindowsRuntime;
-using Capture.Core.Allowlist;
+using Capture.Core.Rules;
 using Capture.Core.Capturing;
 using Capture.Core.Geometry;
 using Capture.Core.Pipeline;
@@ -14,9 +14,9 @@ using WinRT;
 namespace Capture.Windows;
 
 /// <summary>
-/// Captures the allowed windows, each through its own Windows.Graphics.Capture session, and returns
+/// Captures the capturable windows, each through its own Windows.Graphics.Capture session, and returns
 /// one image per window with the parts that were covered on screen blacked out. Pixels of
-/// non-allowed windows never enter this process: only allowed windows are ever handed to the
+/// other windows never enter this process: only capturable windows are ever handed to the
 /// capture API.
 ///
 /// Fails closed: any error, or a window layout that changed while capturing, discards everything.
@@ -26,12 +26,12 @@ public sealed class ScreenCapturer
     private static readonly TimeSpan FrameTimeout = TimeSpan.FromSeconds(1);
     private static readonly TimeSpan RetryDelay = TimeSpan.FromMilliseconds(500);
 
-    private readonly AllowlistMatcher _allowlist;
+    private readonly WindowRuleMatcher _rules;
     private IDirect3DDevice? _device;
 
-    public ScreenCapturer(AllowlistMatcher allowlist)
+    public ScreenCapturer(WindowRuleMatcher rules)
     {
-        _allowlist = allowlist;
+        _rules = rules;
     }
 
     /// <summary>False if Windows refused borderless capture; captured windows then show a yellow border on screen.</summary>
@@ -94,9 +94,9 @@ public sealed class ScreenCapturer
     private async Task<CaptureResult?> TryCaptureAsync(DateTimeOffset timestamp, CancellationToken cancellationToken)
     {
         CapturePlan before = ReadPlan();
-        if (!before.HasAllowedWindows)
+        if (!before.HasCapturableWindows)
         {
-            return CaptureResult.NoAllowedWindow;
+            return CaptureResult.NoCapturableWindow;
         }
 
         Task<WindowFrame>[] captures = before.Windows.Select(p => CaptureWindowAsync(p.Window, cancellationToken)).ToArray();
@@ -165,19 +165,19 @@ public sealed class ScreenCapturer
     }
 
     private CapturePlan ReadPlan() =>
-        CapturePlanner.Plan(DesktopInspector.EnumerateWindows(_allowlist), DesktopInspector.EnumerateMonitors());
+        CapturePlanner.Plan(DesktopInspector.EnumerateWindows(_rules), DesktopInspector.EnumerateMonitors());
 
     private sealed record WindowFrame(WindowInfo Window, int Width, int Height, (int X, int Y) Origin, byte[] Pixels);
 
     /// <summary>
-    /// Captures one allowed window. A session is opened per capture and closed right after the
+    /// Captures one capturable window. A session is opened per capture and closed right after the
     /// first frame: the first frame always shows the current content, and nothing runs in between.
     /// </summary>
     private async Task<WindowFrame> CaptureWindowAsync(WindowInfo window, CancellationToken cancellationToken)
     {
-        if (!window.IsAllowed)
+        if (!window.IsCapturable)
         {
-            throw new InvalidOperationException("Refusing to capture a window that is not allowed.");
+            throw new InvalidOperationException("Refusing to capture a window that no capture rule covers.");
         }
         IDirect3DDevice device = _device ?? throw new InvalidOperationException("InitializeAsync has not been called.");
 

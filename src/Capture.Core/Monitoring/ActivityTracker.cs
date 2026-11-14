@@ -1,4 +1,4 @@
-using Capture.Core.Allowlist;
+using Capture.Core.Rules;
 
 namespace Capture.Core.Monitoring;
 
@@ -139,7 +139,7 @@ public sealed class ActivityTracker(TimeSpan idleTimeout)
         LogWindow(events, timestamp, _current, EventType.Foreground);
     }
 
-    private void LogWindow(List<ActivityEvent> events, DateTimeOffset timestamp, WindowSnapshot window, EventType typeIfAllowed)
+    private void LogWindow(List<ActivityEvent> events, DateTimeOffset timestamp, WindowSnapshot window, EventType typeIfRecorded)
     {
         // Equal snapshots (same window, same title, or "other" after "other") add no information.
         if (window == _lastLogged)
@@ -149,7 +149,7 @@ public sealed class ActivityTracker(TimeSpan idleTimeout)
         _lastLogged = window;
 
         events.Add(window.Mode != WindowMode.Other
-            ? new ActivityEvent(timestamp, typeIfAllowed, window.ProcessName, window.Title, window.Handle)
+            ? new ActivityEvent(timestamp, typeIfRecorded, window.ProcessName, window.Title, window.Handle)
             : new ActivityEvent(timestamp, EventType.Other));
     }
 }

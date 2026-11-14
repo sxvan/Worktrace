@@ -1,5 +1,5 @@
 using System.Windows.Forms;
-using Capture.Core.Allowlist;
+using Capture.Core.Rules;
 using Capture.Core.Monitoring;
 using Windows.Win32;
 using Windows.Win32.Foundation;
@@ -31,7 +31,7 @@ public sealed class WindowActivityMonitor : IDisposable
     private const int WTS_SESSION_LOCK = 0x7;
     private const int WTS_SESSION_UNLOCK = 0x8;
 
-    private readonly AllowlistMatcher _allowlist;
+    private readonly WindowRuleMatcher _rules;
     private readonly TimeSpan _pollInterval;
     private readonly Action<MonitorSignal> _onSignal;
     private readonly Action<Exception> _onError;
@@ -49,13 +49,13 @@ public sealed class WindowActivityMonitor : IDisposable
     private WindowSnapshot? _lastSnapshot;
 
     public WindowActivityMonitor(
-        AllowlistMatcher allowlist,
+        WindowRuleMatcher rules,
         TimeSpan pollInterval,
         Action<MonitorSignal> onSignal,
         Action<Exception> onError,
         TimeProvider? timeProvider = null)
     {
-        _allowlist = allowlist;
+        _rules = rules;
         _pollInterval = pollInterval;
         _onSignal = onSignal;
         _onError = onError;
@@ -158,7 +158,7 @@ public sealed class WindowActivityMonitor : IDisposable
         uint processId = DesktopInspector.GetProcessId(hwnd);
         WindowSnapshot snapshot = Describe(hwnd, processId, out _foregroundHasRule);
 
-        // Title changes only matter for processes that have an allowlist rule, so the name-change
+        // Title changes only matter for processes that have a rule, so the name-change
         // hook is scoped to that one process. Other processes are not observed at all.
         Unhook(ref _nameChangeHook);
         if (_foregroundHasRule && processId != 0)
@@ -184,8 +184,8 @@ public sealed class WindowActivityMonitor : IDisposable
     }
 
     /// <summary>
-    /// Builds the snapshot for a window. The title is only read when the process has an allowlist
-    /// rule, and both process name and title are dropped again if the window is not allowed.
+    /// Builds the snapshot for a window. The title is only read when the process has a
+    /// rule, and both process name and title are dropped again if no rule covers the window.
     /// </summary>
     private WindowSnapshot Describe(HWND hwnd, uint processId, out bool hasRule)
     {
@@ -196,14 +196,14 @@ public sealed class WindowActivityMonitor : IDisposable
         }
 
         string? processName = DesktopInspector.GetProcessName(processId);
-        if (processName is null || !_allowlist.HasRuleFor(processName))
+        if (processName is null || !_rules.HasRuleFor(processName))
         {
             return WindowSnapshot.Other;
         }
 
         hasRule = true;
         string title = DesktopInspector.GetTitle(hwnd);
-        WindowClassification classification = _allowlist.Classify(processName, title);
+        WindowClassification classification = _rules.Classify(processName, title);
         return classification.Mode switch
         {
             WindowMode.Capture => WindowSnapshot.Captured((long)(nint)hwnd, processName, title),

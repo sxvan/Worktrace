@@ -1,11 +1,11 @@
-using Capture.Core.Allowlist;
+using Capture.Core.Rules;
 using Capture.Core.Config;
 
 namespace Capture.Core.Tests;
 
-public class AllowlistMatcherTests
+public class WindowRuleMatcherTests
 {
-    private static AllowlistMatcher Matcher(params WindowRule[] rules) => new(rules);
+    private static WindowRuleMatcher Matcher(params WindowRule[] rules) => new(rules);
 
     [Theory]
     [InlineData("Code.exe")]
@@ -16,22 +16,22 @@ public class AllowlistMatcherTests
         var matcher = Matcher(new WindowRule { Process = "Code.exe" });
 
         Assert.True(matcher.HasRuleFor(process));
-        Assert.True(matcher.IsAllowed(process, "anything"));
+        Assert.True(matcher.ShouldCapture(process, "anything"));
     }
 
     [Fact]
-    public void Unknown_process_is_not_allowed()
+    public void Unknown_process_is_not_captured()
     {
         var matcher = Matcher(new WindowRule { Process = "Code.exe" });
 
         Assert.False(matcher.HasRuleFor("chrome.exe"));
-        Assert.False(matcher.IsAllowed("chrome.exe", "Docs"));
+        Assert.False(matcher.ShouldCapture("chrome.exe", "Docs"));
     }
 
     [Fact]
-    public void Empty_allowlist_allows_nothing()
+    public void No_rules_capture_nothing()
     {
-        Assert.False(Matcher().IsAllowed("Code.exe", "x"));
+        Assert.False(Matcher().ShouldCapture("Code.exe", "x"));
     }
 
     [Fact]
@@ -40,11 +40,11 @@ public class AllowlistMatcherTests
         var matcher = Matcher(new WindowRule { Process = "app.exe", TitlePatterns = ["* - Project X", "Report ?"] });
 
         Assert.True(matcher.HasRuleFor("app.exe"));
-        Assert.True(matcher.IsAllowed("app.exe", "main.cs - Project X"));
-        Assert.True(matcher.IsAllowed("app.exe", "report 7"));
-        Assert.False(matcher.IsAllowed("app.exe", "main.cs - Project X - extra"));
-        Assert.False(matcher.IsAllowed("app.exe", "Report 12"));
-        Assert.False(matcher.IsAllowed("app.exe", null));
+        Assert.True(matcher.ShouldCapture("app.exe", "main.cs - Project X"));
+        Assert.True(matcher.ShouldCapture("app.exe", "report 7"));
+        Assert.False(matcher.ShouldCapture("app.exe", "main.cs - Project X - extra"));
+        Assert.False(matcher.ShouldCapture("app.exe", "Report 12"));
+        Assert.False(matcher.ShouldCapture("app.exe", null));
     }
 
     [Fact]
@@ -52,29 +52,29 @@ public class AllowlistMatcherTests
     {
         var matcher = Matcher(new WindowRule { Process = "app.exe", TitlePatterns = ["a.b (c)*"] });
 
-        Assert.True(matcher.IsAllowed("app.exe", "a.b (c) d"));
-        Assert.False(matcher.IsAllowed("app.exe", "axb (c) d"));
+        Assert.True(matcher.ShouldCapture("app.exe", "a.b (c) d"));
+        Assert.False(matcher.ShouldCapture("app.exe", "axb (c) d"));
     }
 
     [Fact]
-    public void Any_matching_rule_for_the_process_allows_it()
+    public void Any_matching_rule_for_the_process_captures_it()
     {
         var matcher = Matcher(
             new WindowRule { Process = "app.exe", TitlePatterns = ["Only this"] },
             new WindowRule { Process = "app.exe" });
 
-        Assert.True(matcher.IsAllowed("app.exe", "Something else"));
+        Assert.True(matcher.ShouldCapture("app.exe", "Something else"));
     }
 
     [Theory]
     [InlineData("New tab - InPrivate - Microsoft Edge")]
     [InlineData("New Tab - Google Chrome (Incognito)")]
     [InlineData("Mozilla Firefox Private Browsing")]
-    public void Private_windows_are_never_allowed(string title)
+    public void Private_windows_are_never_captured(string title)
     {
         var matcher = Matcher(new WindowRule { Process = "browser.exe" });
 
-        Assert.False(matcher.IsAllowed("browser.exe", title));
+        Assert.False(matcher.ShouldCapture("browser.exe", title));
     }
 
     // ---- Modes ----
@@ -93,7 +93,7 @@ public class AllowlistMatcherTests
         var matcher = Matcher(new WindowRule { Process = "keepass.exe", Mode = "log" });
 
         Assert.Equal(new WindowClassification(WindowMode.Log, LogTitle: false), matcher.Classify("keepass.exe", "Bank login"));
-        Assert.False(matcher.IsAllowed("keepass.exe", "Bank login"));
+        Assert.False(matcher.ShouldCapture("keepass.exe", "Bank login"));
         Assert.True(matcher.HasRuleFor("keepass.exe"));
     }
 

@@ -1,7 +1,7 @@
 using System.Text.RegularExpressions;
 using Capture.Core.Config;
 
-namespace Capture.Core.Allowlist;
+namespace Capture.Core.Rules;
 
 /// <summary>What may be recorded about a window.</summary>
 public enum WindowMode
@@ -23,7 +23,7 @@ public readonly record struct WindowClassification(WindowMode Mode, bool LogTitl
 }
 
 /// <summary>Decides what may be recorded about a window. Anything without a matching rule is <see cref="WindowMode.Other"/>.</summary>
-public sealed class AllowlistMatcher
+public sealed class WindowRuleMatcher
 {
     private static readonly string[] PrivateWindowMarkers =
     [
@@ -41,7 +41,7 @@ public sealed class AllowlistMatcher
     private readonly Dictionary<string, List<Rule>> _rules = new(StringComparer.OrdinalIgnoreCase);
     private readonly List<Rule> _catchAll = [];
 
-    public AllowlistMatcher(IEnumerable<WindowRule> rules)
+    public WindowRuleMatcher(IEnumerable<WindowRule> rules)
     {
         foreach (WindowRule rule in rules)
         {
@@ -83,7 +83,7 @@ public sealed class AllowlistMatcher
     public bool HasRuleFor(string processName) => _catchAll.Count > 0 || _rules.ContainsKey(NormalizeProcess(processName));
 
     /// <summary>True if the window may be captured.</summary>
-    public bool IsAllowed(string processName, string? title) => Classify(processName, title).Mode == WindowMode.Capture;
+    public bool ShouldCapture(string processName, string? title) => Classify(processName, title).Mode == WindowMode.Capture;
 
     /// <summary>The strongest matching rule wins: capture over log, and a rule that logs titles over one that does not.</summary>
     public WindowClassification Classify(string processName, string? title)

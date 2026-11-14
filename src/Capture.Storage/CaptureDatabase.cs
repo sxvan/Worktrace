@@ -7,7 +7,7 @@ using Microsoft.Data.Sqlite;
 
 namespace Capture.Storage;
 
-/// <summary>One allowed window of a capture, as stored in capture_windows.</summary>
+/// <summary>One capturable window of a capture, as stored in capture_windows.</summary>
 /// <param name="FilePath">Relative path of the saved image, or null if it duplicates an earlier one.</param>
 /// <param name="DedupeReferenceId">capture_windows.id of the earlier image this one duplicates.</param>
 public sealed record CapturedWindowRecord(
@@ -53,9 +53,9 @@ public sealed class CaptureDatabase : IDisposable
                 id            INTEGER PRIMARY KEY,
                 timestamp     TEXT NOT NULL,   -- UTC, ISO 8601
                 type          TEXT NOT NULL,
-                process_name  TEXT,            -- null unless the window is allowed
-                window_title  TEXT,            -- null unless the window is allowed
-                window_handle INTEGER          -- null unless the window is allowed
+                process_name  TEXT,            -- null unless a rule covers the window
+                window_title  TEXT,            -- null unless a rule covers the window
+                window_handle INTEGER          -- null unless a rule covers the window
             );
             CREATE INDEX IF NOT EXISTS ix_events_timestamp ON events(timestamp);
 
@@ -72,16 +72,16 @@ public sealed class CaptureDatabase : IDisposable
                 UNIQUE (device_name, left, top, right, bottom, dpi_scale, is_primary)
             );
 
-            -- One row per capture that recorded at least one allowed window.
+            -- One row per capture that recorded at least one capturable window.
             CREATE TABLE IF NOT EXISTS captures (
                 id                    INTEGER PRIMARY KEY,
                 timestamp             TEXT NOT NULL,   -- UTC, ISO 8601
                 trigger               TEXT NOT NULL,
-                focused_window_handle INTEGER          -- null if the focused window is not an allowed one
+                focused_window_handle INTEGER          -- null if the focused window is not a captured one
             );
             CREATE INDEX IF NOT EXISTS ix_captures_timestamp ON captures(timestamp);
 
-            -- One row, and at most one image, per allowed window per capture.
+            -- One row, and at most one image, per capturable window per capture.
             CREATE TABLE IF NOT EXISTS capture_windows (
                 id               INTEGER PRIMARY KEY,
                 capture_id       INTEGER NOT NULL REFERENCES captures(id),

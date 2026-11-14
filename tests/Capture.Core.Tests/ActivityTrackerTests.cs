@@ -13,7 +13,7 @@ public class ActivityTrackerTests
     private static DateTimeOffset At(int seconds) => T0.AddSeconds(seconds);
 
     [Fact]
-    public void Allowed_foreground_window_is_logged_with_details()
+    public void Capturable_foreground_window_is_logged_with_details()
     {
         var e = Assert.Single(Tracker().Process(new ForegroundChanged(T0, Editor)));
 
@@ -21,7 +21,7 @@ public class ActivityTrackerTests
     }
 
     [Fact]
-    public void Non_allowed_window_is_logged_as_non_work_without_details()
+    public void Other_window_is_logged_as_other_without_details()
     {
         var e = Assert.Single(Tracker().Process(new ForegroundChanged(T0, WindowSnapshot.Other)));
 
@@ -29,7 +29,7 @@ public class ActivityTrackerTests
     }
 
     [Fact]
-    public void Switching_between_non_work_windows_logs_only_once()
+    public void Switching_between_other_windows_logs_only_once()
     {
         var tracker = Tracker();
         tracker.Process(new ForegroundChanged(At(0), WindowSnapshot.Other));
@@ -59,7 +59,7 @@ public class ActivityTrackerTests
     }
 
     [Fact]
-    public void Title_change_that_makes_window_non_allowed_logs_non_work()
+    public void Title_change_that_makes_window_other_logs_other()
     {
         var tracker = Tracker();
         tracker.Process(new ForegroundChanged(At(0), Editor));

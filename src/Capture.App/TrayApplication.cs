@@ -86,7 +86,7 @@ public sealed class TrayApplication : ApplicationContext
             CaptureState.Paused => status.PausedUntil is { } until
                 ? $"Paused until {until.ToLocalTime():HH:mm}"
                 : "Paused until resumed",
-            _ => "Not capturing (no allowed window visible)",
+            _ => "Not capturing (no capturable window visible)",
         };
 
         _notifyIcon.Icon = _icons[status.State];

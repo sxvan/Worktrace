@@ -1,6 +1,6 @@
 using System.Diagnostics;
 using System.Threading.Channels;
-using Capture.Core.Allowlist;
+using Capture.Core.Rules;
 using Capture.Core.Monitoring;
 using Capture.Core.Pipeline;
 using Capture.Core.Triggers;
@@ -14,7 +14,7 @@ namespace Capture.App;
 /// <summary>What the tray icon shows.</summary>
 public enum CaptureState
 {
-    /// <summary>Active, and an allowed window is being captured.</summary>
+    /// <summary>Active, and an capturable window is being captured.</summary>
     Capturing,
 
     /// <summary>No input for a while.</summary>
@@ -23,7 +23,7 @@ public enum CaptureState
     /// <summary>Paused by the user.</summary>
     Paused,
 
-    /// <summary>Nothing to capture: no allowed window is visible, or the session is locked or asleep.</summary>
+    /// <summary>Nothing to capture: no capturable window is visible, or the session is locked or asleep.</summary>
     NotCapturing,
 }
 
@@ -123,14 +123,14 @@ public sealed class CaptureCoordinator(
 
         switch (result.Outcome)
         {
-            case CaptureOutcome.NoAllowedWindow:
+            case CaptureOutcome.NoCapturableWindow:
                 if (!_lastCaptureFoundNothing)
                 {
                     _lastCaptureFoundNothing = true;
                     database.InsertEvent(new ActivityEvent(decision.Timestamp, EventType.Other));
                 }
-                Log.Information("Capture ({Trigger}): no allowed window visible", decision.Trigger.ToDbName());
-                Console.WriteLine($"{CapturePipeline.Prefix(decision)} -> nothing to capture (no allowed window visible)");
+                Log.Information("Capture ({Trigger}): no capturable window visible", decision.Trigger.ToDbName());
+                Console.WriteLine($"{CapturePipeline.Prefix(decision)} -> nothing to capture (no capturable window visible)");
                 break;
 
             case CaptureOutcome.Discarded:

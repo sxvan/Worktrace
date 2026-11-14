@@ -3,7 +3,7 @@ using Capture.Core.Capturing;
 namespace Capture.Core.Pipeline;
 
 /// <summary>
-/// The picture of one allowed window straight from capture: the window's own size, showing only
+/// The picture of one capturable window straight from capture: the window's own size, showing only
 /// the parts that were visible on screen, the rest black. Not yet redacted, so it cannot be
 /// saved; see <see cref="RedactedWindowImage"/>. Disposing clears the pixel buffer.
 /// </summary>
@@ -87,14 +87,14 @@ public enum CaptureOutcome
     /// <summary>Window images were produced.</summary>
     Captured,
 
-    /// <summary>No allowed window is visible on any monitor: nothing was captured.</summary>
-    NoAllowedWindow,
+    /// <summary>No capturable window is visible on any monitor: nothing was captured.</summary>
+    NoCapturableWindow,
 
     /// <summary>Something was uncertain (error, window layout changed mid-capture): the frame was thrown away.</summary>
     Discarded,
 }
 
-/// <param name="Images">One image per visible allowed window, topmost first. The receiver must dispose them.</param>
+/// <param name="Images">One image per visible capturable window, topmost first. The receiver must dispose them.</param>
 /// <param name="FocusedWindowHandle">The foreground window, if it is one of the captured windows.</param>
 /// <param name="Reason">Technical reason for a discard. Never contains titles or content.</param>
 public sealed record CaptureResult(
@@ -104,7 +104,7 @@ public sealed record CaptureResult(
     long? FocusedWindowHandle = null,
     string? Reason = null)
 {
-    public static CaptureResult NoAllowedWindow { get; } = new(CaptureOutcome.NoAllowedWindow, [], []);
+    public static CaptureResult NoCapturableWindow { get; } = new(CaptureOutcome.NoCapturableWindow, [], []);
 
     public static CaptureResult Discarded(string reason) => new(CaptureOutcome.Discarded, [], [], Reason: reason);
 }

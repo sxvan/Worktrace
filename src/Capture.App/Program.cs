@@ -9,7 +9,7 @@
 using System.Runtime.InteropServices;
 using System.Threading.Channels;
 using System.Windows.Forms;
-using Capture.Core.Allowlist;
+using Capture.Core.Rules;
 using Capture.Core.Config;
 using Capture.Core.Monitoring;
 using Capture.Core.Pipeline;
@@ -110,19 +110,19 @@ internal static class Program
 
         using var database = new CaptureDatabase(paths.DatabaseFile);
         var tracker = new ActivityTracker(TimeSpan.FromSeconds(config.IdleTimeoutSeconds));
-        var allowlist = new AllowlistMatcher(config.Rules);
+        var rules = new WindowRuleMatcher(config.Rules);
 
         // The monitor thread only enqueues; everything else happens on the coordinator.
         var signals = Channel.CreateUnbounded<MonitorSignal>(new UnboundedChannelOptions { SingleReader = true });
 
         using var monitor = new WindowActivityMonitor(
-            allowlist,
+            rules,
             TimeSpan.FromMilliseconds(config.InputPollIntervalMs),
             signal => signals.Writer.TryWrite(signal),
             error => Log.Error("Monitor error: {ErrorType} 0x{HResult:X8}", error.GetType().Name, error.HResult));
         monitor.Start();
 
-        var capturer = new ScreenCapturer(allowlist);
+        var capturer = new ScreenCapturer(rules);
         Task.Run(capturer.InitializeAsync).GetAwaiter().GetResult();
         if (!capturer.IsBorderless)
         {
