@@ -1,0 +1,59 @@
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
+     xmlns:util="http://wixtoolset.org/schemas/v4/wxs/util">
+
+  <!--
+    Installs for all users of the machine into Program Files, where only administrators can
+    change the program and its config.json. Installs and uninstalls without any dialog
+    (msiexec /i TimeCapture-x.y.z.msi /qn, msiexec /x TimeCapture-x.y.z.msi /qn).
+
+    Never change the UpgradeCode: it is how a newer version finds and replaces an older one.
+  -->
+  <Package Name="TimeCapture"
+           Manufacturer="axelion AG"
+           Version="$(var.Version)"
+           UpgradeCode="69A4A435-F90F-4F41-BE2E-7515F2FA60BC"
+           Scope="perMachine">
+
+    <MajorUpgrade DowngradeErrorMessage="A newer version of TimeCapture is already installed." />
+    <MediaTemplate EmbedCab="yes" />
+
+    <!-- A running TimeCapture is ended before its files are replaced or removed, so neither an
+         update nor an uninstall asks for a restart. Ending it loses nothing: every capture is
+         stored in its own short transaction. -->
+    <util:CloseApplication Id="CloseTimeCapture" Target="TimeCapture.exe"
+                           CloseMessage="no" RebootPrompt="no" PromptToContinue="no"
+                           TerminateProcess="0" Timeout="5" />
+    <!-- Early, before Windows Installer checks which files are in use. -->
+    <InstallExecuteSequence>
+      <Custom Action="override Wix4CloseApplications_X64" Before="InstallValidate" />
+    </InstallExecuteSequence>
+
+    <StandardDirectory Id="ProgramFiles64Folder">
+      <Directory Id="INSTALLFOLDER" Name="TimeCapture" />
+    </StandardDirectory>
+
+    <Feature Id="Main" Title="TimeCapture">
+      <!-- The program with a Start menu entry. Nothing starts it automatically: each user
+           chooses "Start with Windows" in the tray menu. -->
+      <Component Id="TimeCaptureExe" Directory="INSTALLFOLDER">
+        <File Id="TimeCaptureExe" Source="$(var.PublishDir)\TimeCapture.exe" KeyPath="yes">
+          <Shortcut Id="StartMenuShortcut" Directory="ProgramMenuFolder" Name="TimeCapture"
+                    Description="Records work activity for timesheets"
+                    WorkingDirectory="INSTALLFOLDER" Advertise="no" />
+        </File>
+      </Component>
+
+      <!-- Everything else the publish produced (the native libraries), except the developer's
+           own config.json. -->
+      <Files Directory="INSTALLFOLDER" Include="$(var.PublishDir)\**">
+        <Exclude Files="$(var.PublishDir)\TimeCapture.exe" />
+        <Exclude Files="$(var.PublishDir)\config.json" />
+      </Files>
+
+      <!-- The neutral config: no rules, so nothing is recorded until an administrator adds some. -->
+      <Component Id="DefaultConfig" Directory="INSTALLFOLDER">
+        <File Id="DefaultConfig" Source="config.json" KeyPath="yes" />
+      </Component>
+    </Feature>
+  </Package>
+</Wix>
