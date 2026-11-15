@@ -1,32 +1,17 @@
-// The configuration that the installer puts next to TimeCapture.exe in Program Files.
-// Only administrators can change it there. Changes take effect when TimeCapture is restarted.
 {
-  // Where the database, captures and logs go. Empty means each user's own
-  // %LOCALAPPDATA%\TimeCapture folder.
   "storageRoot": "",
-
-  // Which applications may be recorded. With no rules, nothing is recorded.
-  //
-  //   { "process": "Code.exe" }                                      screenshots and window titles
-  //   { "process": "msedge.exe", "mode": "log", "logTitles": true }  application and titles, no screenshots
-  //   { "process": "Outlook.exe", "mode": "log" }                    application only
-  //
-  // Applications without a rule are logged only as "other", without name or title.
   "rules": [],
-
   "inputPollIntervalMs": 1000,
   "windowSwitchDelayMs": 1000,
   "typingPauseMs": 2000,
   "fallbackIntervalSeconds": 60,
   "minCaptureIntervalSeconds": 5,
   "idleTimeoutSeconds": 180,
-
   "retentionDays": 14,
   "imageQuality": 40,
   "maxImageDimension": 1920,
   "imageEncoderSpeed": 8,
   "dedupeThreshold": 4,
-
   "redactSecrets": true,
   "skipPasswordFields": true
 }
