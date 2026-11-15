@@ -127,3 +127,7 @@ Inside the storage root:
 | `src/Capture.App` | The tray application |
 | `tests/Capture.Core.Tests` | Unit tests |
 | `installer` | The WiX project for the MSI |
+
+## License
+
+[MIT](LICENSE)
