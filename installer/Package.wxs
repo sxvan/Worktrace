@@ -9,7 +9,7 @@
     Never change the UpgradeCode: it is how a newer version finds and replaces an older one.
   -->
   <Package Name="TimeCapture"
-           Manufacturer="axelion AG"
+           Manufacturer="sxvan"
            Version="$(var.Version)"
            UpgradeCode="69A4A435-F90F-4F41-BE2E-7515F2FA60BC"
            Scope="perMachine">
