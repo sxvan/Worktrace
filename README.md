@@ -3,7 +3,8 @@
 Tools for building a timesheet from what you actually did on your computer.
 
 So far the repo contains one component, **TimeCapture**: a Windows tray application that records which
-application and window you work in and takes screenshots of the windows you allow. Everything stays on
+application and window you work in, reads the text in the windows you allow and, if you want, keeps
+screenshots of them. Everything stays on
 your machine. The application contains no network code.
 
 ## What TimeCapture records
@@ -19,15 +20,28 @@ For each application, a rule in `config.json` decides how much is recorded:
 
 It also records when you are idle, when the screen is locked and when the computer sleeps.
 
+What is kept of a captured window comes in three layers. Each layer is safer to hand on than the next:
+
+| Layer | Content | Setting | If text recognition misses a secret |
+|---|---|---|---|
+| 1 | Application name, window title, timing | always | Titles are checked as text, so nothing is missed by recognition |
+| 2 | Recognized text with its position in the window | `storeText` | The text was never read, so it is not stored either |
+| 3 | The screenshot | `storeImages` | It stays visible in the image |
+
+Titles and recognized text pass the same secret check as the screenshots: such words are replaced
+by `[redacted]`. With `stripUrlQueries`, URLs also lose their query string and fragment
+(`?code=...`, `#access_token=...`).
+
 Some things are never recorded, whatever the rules say:
 
 - Private browser windows (InPrivate, Incognito, Private Browsing).
 - The screen while a password field has focus (`skipPasswordFields`).
-- Text that looks like a secret. Every screenshot is read with the Windows text recognition before it
-  is saved, and such text is blacked out. If the text cannot be read, the screenshot is discarded
-  (`redactSecrets`).
+- Text that looks like a secret. Every captured window is read with the Windows text recognition
+  before anything of it is saved; such text is blacked out in the screenshot and replaced in the
+  stored text. If the text cannot be read, nothing of the window's content is kept (`redactSecrets`).
 
-Screenshots are stored as AVIF files and deleted after `retentionDays` days.
+Screenshots are stored as AVIF files and deleted after `retentionDays` days, recognized text after
+`textRetentionDays` days. Window titles and events are kept.
 
 ## Build and run
 
@@ -83,18 +97,23 @@ wins over `log`. The `*` rule skips windows without a title.
 | `minCaptureIntervalSeconds` | 5 | Minimum time between two screenshots. |
 | `idleTimeoutSeconds` | 180 | No input for this long counts as idle. |
 | `retentionDays` | 14 | Screenshots older than this are deleted. |
+| `storeText` | true | Store the recognized text of captured windows (layer 2). Needs `redactSecrets`. |
+| `textRetentionDays` | 30 | Recognized text older than this is deleted. |
+| `storeImages` | true | Keep the screenshots (layer 3). Off keeps titles and recognized text only. |
 | `imageQuality` | 40 | AVIF quality of the screenshots. |
 | `maxImageDimension` | 1920 | Screenshots are scaled down so the longer side has at most this many pixels. 0 keeps the original size. |
 | `imageEncoderSpeed` | 8 | AVIF encoder effort: 0 gives the smallest files, 9 is the fastest. |
 | `dedupeThreshold` | 4 | How similar a screenshot must be to the previous one to count as a duplicate. Higher values treat more screenshots as duplicates. |
 | `redactSecrets` | true | Black out text that looks like a secret, as described above. |
+| `stripUrlQueries` | false | Cut query strings and fragments off URLs in stored titles and text, also where the secret check sees nothing. |
 | `skipPasswordFields` | true | Take no screenshot while a password field has focus. |
 
 ## Where the data goes
 
 Inside the storage root:
 
-- `capture.db`: a SQLite database with the activity events and one entry per screenshot.
+- `capture.db`: a SQLite database with the activity events, one entry per captured window and the
+  recognized text.
 - `captures\`: the screenshots, one folder per day.
 - `logs\`: the application's log files. They contain no window titles and no screen content.
 

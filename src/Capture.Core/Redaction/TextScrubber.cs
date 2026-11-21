@@ -6,18 +6,20 @@ namespace Capture.Core.Redaction;
 
 /// <summary>
 /// Turns text into the form that may be stored as text: words the secret detectors flag become
-/// "[redacted]", and URLs lose their query string and fragment, where tokens and session ids live.
-/// Used for window titles (layer 1) and for recognized screen text (layer 2).
+/// "[redacted]". Optionally, URLs also lose their query string and fragment, where tokens and
+/// session ids the detectors do not recognize can hide. Used for window titles (layer 1) and for
+/// recognized screen text (layer 2).
 /// </summary>
-public sealed class TextScrubber(IReadOnlyList<ISecretDetector> detectors)
+public sealed class TextScrubber(IReadOnlyList<ISecretDetector> detectors, bool stripUrlQueries = false)
 {
     public const string RedactedMarker = "[redacted]";
 
     private const int CharWidth = 10;
     private const int LineHeight = 20;
 
+    /// <summary>A URL with a scheme, or a bare host name directly followed by a path or query, that has a query or fragment.</summary>
     private static readonly Regex Url = new(
-        @"\b[A-Za-z][A-Za-z0-9+.\-]*://[^\s?#]*[?#]\S*",
+        @"(?:\b[A-Za-z][A-Za-z0-9+.\-]*://|\b(?:[A-Za-z0-9\-]+\.)+[A-Za-z]{2,}(?=[/?#]))[^\s?#]*[?#]\S+",
         RegexOptions.CultureInvariant | RegexOptions.Compiled, TimeSpan.FromMilliseconds(200));
 
     public static TextScrubber Default { get; } = new([new HeuristicSecretDetector()]);
@@ -53,7 +55,7 @@ public sealed class TextScrubber(IReadOnlyList<ISecretDetector> detectors)
     /// Scrubs a row of recognized words, given the regions the detectors already found for the
     /// whole image. A word counts as hidden if a region covers at least half of it.
     /// </summary>
-    public static string ScrubWords(IReadOnlyList<RecognizedWord> words, IReadOnlyList<RectInt> secretRegions) =>
+    public string ScrubWords(IReadOnlyList<RecognizedWord> words, IReadOnlyList<RectInt> secretRegions) =>
         Join(words, Hidden(words, secretRegions));
 
     public IReadOnlyList<RectInt> FindSecrets(IReadOnlyList<RecognizedLine> lines)
@@ -104,7 +106,7 @@ public sealed class TextScrubber(IReadOnlyList<ISecretDetector> detectors)
     }
 
     /// <summary>Joins the words with spaces; each run of hidden words becomes one marker.</summary>
-    private static string Join(IReadOnlyList<RecognizedWord> words, bool[] hidden)
+    private string Join(IReadOnlyList<RecognizedWord> words, bool[] hidden)
     {
         var builder = new StringBuilder();
         for (int i = 0; i < words.Count; i++)
@@ -119,6 +121,6 @@ public sealed class TextScrubber(IReadOnlyList<ISecretDetector> detectors)
             }
             builder.Append(hidden[i] ? RedactedMarker : words[i].Text);
         }
-        return StripUrlQueries(builder.ToString());
+        return stripUrlQueries ? StripUrlQueries(builder.ToString()) : builder.ToString();
     }
 }

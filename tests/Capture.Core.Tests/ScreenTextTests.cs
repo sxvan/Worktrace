@@ -44,11 +44,26 @@ public class ScreenTextTests
         Assert.Equal("", TextScrubber.Default.Scrub(""));
     }
 
+    [Fact]
+    public void Url_queries_are_kept_by_default()
+    {
+        Assert.Equal("https://example.com/search?q=report - Edge", TextScrubber.Default.Scrub("https://example.com/search?q=report - Edge"));
+    }
+
+    [Fact]
+    public void Url_queries_are_cut_when_asked()
+    {
+        var scrubber = new TextScrubber([new HeuristicSecretDetector()], stripUrlQueries: true);
+        Assert.Equal("https://example.com/search - Edge", scrubber.Scrub("https://example.com/search?q=report - Edge"));
+    }
+
     [Theory]
     [InlineData("https://example.com/callback?code=abc123&state=x", "https://example.com/callback")]
     [InlineData("see https://example.com/a#access_token=xyz now", "see https://example.com/a now")]
     [InlineData("https://github.com/org/repo/pull/12", "https://github.com/org/repo/pull/12")]
+    [InlineData("PR #3 - github.com/org/repo?token=abc - Edge", "PR #3 - github.com/org/repo - Edge")]
     [InlineData("no url? here", "no url? here")]
+    [InlineData("Is it config.json? yes", "Is it config.json? yes")]
     public void Url_queries_and_fragments_are_cut(string input, string expected)
     {
         Assert.Equal(expected, TextScrubber.StripUrlQueries(input));
@@ -62,7 +77,7 @@ public class ScreenTextTests
         // A sidebar entry at the left, the editor line far to the right on the same row.
         RecognizedLine row = new([Word("EXPLORER", 0, 0), Word("public", 400, 0), Word("interface", 470, 0)]);
 
-        IReadOnlyList<ScreenTextLine> text = ScreenText.Build([row], [], 1000, 500);
+        IReadOnlyList<ScreenTextLine> text = ScreenText.Build([row], [], 1000, 500, TextScrubber.Default);
 
         Assert.Equal(["EXPLORER", "public interface"], text.Select(t => t.Text));
     }
@@ -72,7 +87,7 @@ public class ScreenTextTests
     {
         RecognizedLine row = new([Word("hello", 100, 50)]);
 
-        ScreenTextLine line = Assert.Single(ScreenText.Build([row], [], 1000, 500));
+        ScreenTextLine line = Assert.Single(ScreenText.Build([row], [], 1000, 500, TextScrubber.Default));
 
         Assert.Equal(0.1, line.Left);
         Assert.Equal(0.1, line.Top);
@@ -86,7 +101,7 @@ public class ScreenTextTests
         RecognizedLine row = new([Word("key", 0, 0), Word("abc", 40, 0), Word("def", 80, 0), Word("end", 120, 0)]);
         RectInt secret = new(40, 0, 110, 20);
 
-        ScreenTextLine line = Assert.Single(ScreenText.Build([row], [secret], 1000, 500));
+        ScreenTextLine line = Assert.Single(ScreenText.Build([row], [secret], 1000, 500, TextScrubber.Default));
 
         Assert.Equal("key [redacted] end", line.Text);
     }

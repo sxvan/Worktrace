@@ -75,7 +75,7 @@ internal static class CaptureHost
             Console.WriteLine("Note: storeText needs redactSecrets; no recognized text will be stored.");
         }
 
-        using var database = new CaptureDatabase(paths.DatabaseFile, TextScrubber.Default);
+        using var database = new CaptureDatabase(paths.DatabaseFile, new TextScrubber([new HeuristicSecretDetector()], config.StripUrlQueries));
         var tracker = new ActivityTracker(TimeSpan.FromSeconds(config.IdleTimeoutSeconds));
         var rules = new WindowRuleMatcher(config.Rules);
 
@@ -165,7 +165,7 @@ internal static class CaptureHost
         }
 
         Console.WriteLine($"Secret redaction: on (text recognition language {recognizer.LanguageTag})");
-        return new TextRedactor(recognizer, [new HeuristicSecretDetector()]);
+        return new TextRedactor(recognizer, [new HeuristicSecretDetector()], config.StripUrlQueries);
     }
 
     /// <summary>Retention runs on startup and once per day.</summary>

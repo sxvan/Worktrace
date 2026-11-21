@@ -26,7 +26,8 @@ public static class ScreenText
     /// them. Rows are split into segments at wide gaps; empty segments are left out.
     /// </summary>
     public static IReadOnlyList<ScreenTextLine> Build(
-        IReadOnlyList<RecognizedLine> rows, IReadOnlyList<RectInt> secretRegions, int imageWidth, int imageHeight)
+        IReadOnlyList<RecognizedLine> rows, IReadOnlyList<RectInt> secretRegions, int imageWidth, int imageHeight,
+        TextScrubber scrubber)
     {
         var result = new List<ScreenTextLine>();
         if (imageWidth <= 0 || imageHeight <= 0)
@@ -38,7 +39,7 @@ public static class ScreenText
         {
             foreach (List<RecognizedWord> segment in Segments(row.Words))
             {
-                string text = TextScrubber.ScrubWords(segment, secretRegions).Trim();
+                string text = scrubber.ScrubWords(segment, secretRegions).Trim();
                 if (text.Length == 0)
                 {
                     continue;

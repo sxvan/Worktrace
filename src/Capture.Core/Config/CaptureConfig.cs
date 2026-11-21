@@ -70,6 +70,13 @@ public sealed class CaptureConfig
     /// </summary>
     public bool RedactSecrets { get; set; } = true;
 
+    /// <summary>
+    /// Cut the query string and fragment off URLs in stored titles and text. The secret check
+    /// already replaces values that look like secrets; this also drops the ones it does not
+    /// recognize, at the cost of ids some tools keep there.
+    /// </summary>
+    public bool StripUrlQueries { get; set; }
+
     /// <summary>Take no capture while the focused element is a password field.</summary>
     public bool SkipPasswordFields { get; set; } = true;
 }
