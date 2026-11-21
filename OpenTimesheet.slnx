@@ -1,6 +1,7 @@
 <Solution>
   <Folder Name="/src/">
     <Project Path="src/Capture.App/Capture.App.csproj" />
+    <Project Path="src/Capture.Cli/Capture.Cli.csproj" />
     <Project Path="src/Capture.Core/Capture.Core.csproj" />
     <Project Path="src/Capture.Storage/Capture.Storage.csproj" />
     <Project Path="src/Capture.Windows/Capture.Windows.csproj" />

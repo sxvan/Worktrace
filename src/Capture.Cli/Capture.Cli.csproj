@@ -1,0 +1,30 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <!-- A console program that opens one window: the review of a screenshot before it is shared. -->
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0-windows10.0.22621.0</TargetFramework>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <UseWindowsForms>true</UseWindowsForms>
+    <!-- Not "timecapture": on Windows that would collide with TimeCapture.exe in the same folder. -->
+    <AssemblyName>timecapture-cli</AssemblyName>
+    <RootNamespace>Capture.Cli</RootNamespace>
+    <NoWarn>$(NoWarn);WFO0003</NoWarn>
+    <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Capture.Core\Capture.Core.csproj" />
+    <ProjectReference Include="..\Capture.Storage\Capture.Storage.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- Text recognition: PaddleOCR (PP-OCRv5) running locally, models bundled, no download. -->
+    <PackageReference Include="Sdcb.PaddleOCR" Version="3.3.1" />
+    <PackageReference Include="Sdcb.PaddleOCR.Models.Local" Version="3.3.1" />
+    <PackageReference Include="Sdcb.PaddleOCR.Models.LocalV5" Version="3.3.1" />
+    <PackageReference Include="Sdcb.PaddleInference.runtime.win64.mkl" Version="3.3.1.70" />
+    <PackageReference Include="OpenCvSharp4.runtime.win" Version="4.13.0.20261107" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- The same config.json as the tray app, so both find the same storage root. -->
+    <None Include="..\Capture.App\config.json" Link="config.json" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+  </ItemGroup>
+</Project>

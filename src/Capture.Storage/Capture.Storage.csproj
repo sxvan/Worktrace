@@ -6,6 +6,8 @@
     <InternalsVisibleTo Include="Capture.Core.Tests" />
     <!-- The tray app's "Export day…": the only reader of unredacted images. -->
     <InternalsVisibleTo Include="TimeCapture" />
+    <!-- timecapture-cli reads images only to recognize and redact them before the user's review. -->
+    <InternalsVisibleTo Include="timecapture-cli" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\Capture.Core\Capture.Core.csproj" />
