@@ -1,4 +1,4 @@
-# open-timesheet
+# Worktrace
 
 Tools for building a timesheet from what you actually did on your computer.
 
@@ -79,7 +79,7 @@ encrypted ones stay readable.
 You need Windows (x64) and the .NET 10 SDK.
 
 ```powershell
-dotnet build OpenTimesheet.slnx
+dotnet build Worktrace.slnx
 dotnet test --project tests/Capture.Core.Tests
 dotnet run --project src/Capture.App
 dotnet run --project src/Capture.Cli -- export
