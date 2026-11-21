@@ -5,11 +5,15 @@ using ImageMagick;
 namespace Capture.Storage;
 
 /// <summary>
-/// Encodes redacted window images as AVIF and writes them to
-/// captures\yyyy-MM-dd\HHmmss_fff_wN_Process.avif (local time) under the storage root.
+/// Encodes redacted window images as lossless PNG and writes them to
+/// captures\yyyy-MM-dd\HHmmss_fff_wN_Process.png (local time) under the storage root.
 /// This is the only place image data is written to disk.
+///
+/// Lossless and at full size, because the images are read again later (text recognition, a
+/// second redaction pass, a model): scaling down or lossy compression blurs small text until
+/// characters can no longer be told apart. PNG is read by every tool and accepted by model APIs.
 /// </summary>
-public sealed class FileImageStore(string root, int quality, int encoderSpeed, int maxDimension) : IImageStore
+public sealed class FileImageStore(string root, int maxDimension) : IImageStore
 {
     public const string CapturesFolderName = "captures";
     public const string DayFolderFormat = "yyyy-MM-dd";
@@ -21,7 +25,7 @@ public sealed class FileImageStore(string root, int quality, int encoderSpeed, i
         string relativePath = Path.Combine(
             CapturesFolderName,
             local.ToString(DayFolderFormat, CultureInfo.InvariantCulture),
-            $"{local.ToString("HHmmss_fff", CultureInfo.InvariantCulture)}_w{sequence}_{process}.avif");
+            $"{local.ToString("HHmmss_fff", CultureInfo.InvariantCulture)}_w{sequence}_{process}.png");
         string fullPath = Path.Combine(root, relativePath);
         Directory.CreateDirectory(Path.GetDirectoryName(fullPath)!);
 
@@ -57,8 +61,8 @@ public sealed class FileImageStore(string root, int quality, int encoderSpeed, i
         // The image is opaque; the alpha channel only carries leftovers from window capture.
         magick.Alpha(AlphaAction.Off);
 
-        // Scale down so the longer side is at most maxDimension. Scale() averages pixels, which is
-        // the cheapest method and keeps text clean. Never scales up.
+        // Optionally scale down so the longer side is at most maxDimension (0: keep the original
+        // size). Scale() averages pixels, the cheapest method. Never scales up.
         int longerSide = Math.Max(width, height);
         if (maxDimension > 0 && longerSide > maxDimension)
         {
@@ -67,11 +71,9 @@ public sealed class FileImageStore(string root, int quality, int encoderSpeed, i
             magick.Scale(new MagickGeometry((uint)width, (uint)height) { IgnoreAspectRatio = true });
         }
 
-        magick.Format = MagickFormat.Avif;
-        magick.Quality = (uint)quality;
-        // Encoder effort, 0 (smallest file) to 9 (fastest). On a 2560x1392 screenshot, 8 needs about
-        // a quarter of the CPU time of the default for a file roughly a quarter larger.
-        magick.Settings.SetDefine(MagickFormat.Heic, "speed", encoderSpeed.ToString(CultureInfo.InvariantCulture));
+        // No metadata chunks (creation times and the like): the database holds the facts.
+        magick.Strip();
+        magick.Format = MagickFormat.Png;
         return magick.ToByteArray();
     }
 

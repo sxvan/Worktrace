@@ -50,16 +50,12 @@ public sealed class CaptureConfig
     /// </summary>
     public bool StoreImages { get; set; } = true;
 
-    public int ImageQuality { get; set; } = 40;
-
     /// <summary>
-    /// Saved images are scaled down so their longer side is at most this many pixels. 0 keeps the
-    /// original size. Smaller images need less memory, CPU and disk, but small text gets harder to read.
+    /// Saved images (lossless PNG) are scaled down so their longer side is at most this many
+    /// pixels. 0, the default, keeps the original size: scaled-down screen text soon becomes
+    /// unreadable for text recognition.
     /// </summary>
-    public int MaxImageDimension { get; set; } = 1920;
-
-    /// <summary>AVIF encoder effort: 0 gives the smallest files, 9 is the fastest.</summary>
-    public int ImageEncoderSpeed { get; set; } = 8;
+    public int MaxImageDimension { get; set; }
 
     /// <summary>Maximum dHash Hamming distance at which two images count as the same.</summary>
     public int DedupeThreshold { get; set; } = 4;
