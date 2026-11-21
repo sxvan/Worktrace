@@ -22,4 +22,6 @@ jobs:
         run: dotnet build OpenTimesheet.slnx -c Release
 
       - name: Test
-        run: dotnet test --project tests/Capture.Core.Tests -c Release --no-build
+        run: |
+          dotnet test --project tests/Capture.Core.Tests -c Release --no-build
+          dotnet test --project tests/Capture.Storage.Tests -c Release --no-build

@@ -41,4 +41,8 @@ public static class EventTypeNames
         EventType.Resumed => "resumed",
         _ => throw new ArgumentOutOfRangeException(nameof(type), type, null),
     };
+
+    /// <summary>The reverse of <see cref="ToDbName"/>; null for names this version does not know.</summary>
+    public static EventType? FromDbName(string name) =>
+        Enum.GetValues<EventType>().Cast<EventType?>().FirstOrDefault(t => t!.Value.ToDbName() == name);
 }

@@ -2,10 +2,14 @@
 
 Tools for building a timesheet from what you actually did on your computer.
 
-So far the repo contains one component, **TimeCapture**: a Windows tray application that records which
-application and window you work in, reads the text in the windows you allow and, if you want, keeps
-screenshots of them. Everything stays on
-your machine. The application contains no network code.
+The repo contains two components:
+
+- **TimeCapture**: a Windows tray application that records which application and window you work in,
+  reads the text in the windows you allow and, if you want, keeps screenshots of them.
+- **timecapture-cli**: a command line tool that reads what TimeCapture recorded, for building a
+  timesheet (for example with Claude Code, see [Building a timesheet](#building-a-timesheet)).
+
+TimeCapture keeps everything on your machine. Neither tool contains network code.
 
 ## What TimeCapture records
 
@@ -51,6 +55,7 @@ You need Windows (x64) and the .NET 10 SDK.
 dotnet build OpenTimesheet.slnx
 dotnet test --project tests/Capture.Core.Tests
 dotnet run --project src/Capture.App
+dotnet run --project src/Capture.Cli -- export
 ```
 
 TimeCapture appears as an icon in the notification area. Its menu lets you pause and resume recording,
@@ -117,6 +122,62 @@ Inside the storage root:
 - `captures\`: the screenshots, one folder per day.
 - `logs\`: the application's log files. They contain no window titles and no screen content.
 
+## Building a timesheet
+
+`timecapture-cli` turns the recorded data into a list of visits: stretches during which one window
+had focus, and breaks (idle, locked, asleep, paused). It only reads; the database is opened read-only.
+
+```powershell
+# Today, titles and recognized text (layer 2)
+dotnet run --project src/Capture.Cli -- export
+
+# One day, titles only (layer 1), or as JSON
+dotnet run --project src/Capture.Cli -- export --day 2026-11-20 --layer 1
+dotnet run --project src/Capture.Cli -- export --from "2026-11-20 13:00" --to "2026-11-20 15:00" --format json
+
+# One screenshot as PNG (layer 3), by the id from an "images:" line
+dotnet run --project src/Capture.Cli -- image 1234
+```
+
+```
+09:02:10-09:14:33  12m23s  Code.exe "Redaction.cs - open-timesheet - Visual Studio Code"
+    [main] public interface IRedactor (x4)
+    [left] EXPLORER
+    images: 812, 840
+09:14:33-09:20:00   5m27s  [idle]
+```
+
+Indented lines are the text that was seen most often in the window, with where it was (`main`,
+`top`, `left`, `right`, `bottom`). Everything in the export is scrubbed again on the way out, so
+data recorded before scrubbing existed is covered too. The storage root comes from `--root`, the
+`TIMECAPTURE_ROOT` environment variable, or the same `config.json` the tray app uses.
+
+### With Claude Code
+
+The skill in `.claude/skills/timesheet` describes how to turn the export into timesheet entries.
+Whatever Claude reads is sent to Anthropic, so it should read the data only through the export, and
+look at screenshots only one at a time with your approval. Permission rules make that hold instead
+of relying on instructions. Add them to `.claude/settings.json` (shared) or
+`.claude/settings.local.json` (only you):
+
+```json
+{
+  "permissions": {
+    "allow": ["Bash(dotnet run --project src/Capture.Cli -- export:*)"],
+    "ask": ["Bash(dotnet run --project src/Capture.Cli -- image:*)", "Read(**/timecapture-images/**)"],
+    "deny": [
+      "Read(./data/**)", "Edit(./data/**)",
+      "Read(~/AppData/Local/TimeCapture/**)", "Edit(~/AppData/Local/TimeCapture/**)",
+      "Bash(sqlite3:*)"
+    ]
+  }
+}
+```
+
+Adjust the deny paths if your `storageRoot` is somewhere else. Deny rules cover Claude's file tools
+and the commands they name; a shell command that reads the files some other way is not caught, so
+the skill also tells Claude not to.
+
 ## Repository layout
 
 | Path | Content |
@@ -125,7 +186,9 @@ Inside the storage root:
 | `src/Capture.Windows` | Window inspection, screen capture, text recognition, password field detection |
 | `src/Capture.Storage` | SQLite database, image files, retention |
 | `src/Capture.App` | The tray application |
+| `src/Capture.Cli` | `timecapture-cli`: export and image commands |
 | `tests/Capture.Core.Tests` | Unit tests |
+| `tests/Capture.Storage.Tests` | Database round-trip tests |
 
 ## License
 

@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <!-- Not "timecapture": on Windows that would collide with TimeCapture.exe in the same folder. -->
+    <AssemblyName>timecapture-cli</AssemblyName>
+    <RootNamespace>Capture.Cli</RootNamespace>
+    <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Capture.Core\Capture.Core.csproj" />
+    <ProjectReference Include="..\Capture.Storage\Capture.Storage.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- The same config.json as the tray app, so both find the same storage root. -->
+    <None Include="..\Capture.App\config.json" Link="config.json" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+  </ItemGroup>
+</Project>

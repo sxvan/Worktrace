@@ -80,4 +80,13 @@ public sealed class FileImageStore(string root, int quality, int encoderSpeed, i
         char[] chars = value.Select(c => char.IsAsciiLetterOrDigit(c) || c is '-' or '_' ? c : '_').ToArray();
         return chars.Length == 0 ? "window" : new string(chars, 0, Math.Min(chars.Length, 40));
     }
+
+    /// <summary>Writes the stored AVIF file at <paramref name="source"/> as a PNG, for viewers that cannot read AVIF.</summary>
+    public static void ConvertToPng(string source, string target)
+    {
+        using var magick = new MagickImage(source);
+        magick.Format = MagickFormat.Png;
+        Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(target))!);
+        magick.Write(target);
+    }
 }
