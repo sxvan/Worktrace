@@ -112,11 +112,26 @@ Changes take effect when TimeCapture is restarted. When you build and run from t
 | `mode` | `capture` (the default) or `log`. A rule with any other value is ignored. |
 | `logTitles` | For `log` rules: also store the window title. Leave it off for password managers, mail and the like. |
 | `titlePatterns` | Optional. The rule only applies to windows whose whole title matches one of these patterns. `*` stands for any text, `?` for one character. |
+| `excludeTitlePatterns` | Optional. The rule does not apply to windows whose whole title matches one of these patterns, whatever `titlePatterns` says. The other rules decide about them. |
 
 When an application has rules of its own, only those decide. A `log` rule for one application therefore
 exempts it from a `*` rule that captures everything else. If several rules match a window, `capture`
 wins over `log`. The `*` rule skips windows without a title. Invisible overlays, such as the NVIDIA overlay, are
 never captured and do not hide the windows below them.
+
+To leave out certain websites or documents, exclude them from the capturing rule by title, and let a
+`log` rule keep their title for the timesheet. A browser's window title is the title of its active
+page, so this works per site, as far as the site names itself in its title:
+
+```json
+"rules": [
+  { "process": "*", "excludeTitlePatterns": ["*YouTube*", "*Netflix*"] },
+  { "process": "*", "mode": "log", "logTitles": true }
+]
+```
+
+YouTube and Netflix windows are then logged with their title but never captured. Without the
+second rule they would be recorded as "another application" only.
 
 ### Settings
 

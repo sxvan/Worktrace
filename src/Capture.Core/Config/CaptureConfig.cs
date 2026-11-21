@@ -82,4 +82,11 @@ public sealed class WindowRule
     /// Optional window title patterns with * and ? wildcards. If present, at least one must match the whole title.
     /// </summary>
     public List<string>? TitlePatterns { get; set; }
+
+    /// <summary>
+    /// Optional title patterns with * and ? wildcards for windows this rule does not cover, e.g.
+    /// "*YouTube*". A window whose whole title matches one is left to the other rules, as if this
+    /// rule did not exist; if none covers it, it is recorded as "other" only.
+    /// </summary>
+    public List<string>? ExcludeTitlePatterns { get; set; }
 }

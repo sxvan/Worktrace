@@ -170,4 +170,34 @@ public class WindowRuleMatcherTests
         Assert.False(matcher.HasRuleFor("app.exe"));
         Assert.Equal(WindowClassification.Other, matcher.Classify("app.exe", "x"));
     }
+
+    [Fact]
+    public void An_excluded_title_is_left_to_the_other_rules()
+    {
+        var matcher = Matcher(
+            new WindowRule { Process = "*", ExcludeTitlePatterns = ["*YouTube*"] },
+            new WindowRule { Process = "*", Mode = "log", LogTitles = true });
+
+        Assert.Equal(new WindowClassification(WindowMode.Log, LogTitle: true),
+            matcher.Classify("msedge.exe", "Lofi beats - YouTube and 7 more pages - Personal - Microsoft Edge"));
+        Assert.Equal(WindowMode.Capture, matcher.Classify("msedge.exe", "sxvan/Glove - GitHub - Microsoft Edge").Mode);
+    }
+
+    [Fact]
+    public void An_excluded_title_without_another_rule_is_other()
+    {
+        var matcher = Matcher(new WindowRule { Process = "msedge.exe", ExcludeTitlePatterns = ["*Bank*"] });
+
+        Assert.Equal(WindowClassification.Other, matcher.Classify("msedge.exe", "My Bank - Login"));
+        Assert.True(matcher.ShouldCapture("msedge.exe", "Docs"));
+    }
+
+    [Fact]
+    public void Exclusion_wins_over_the_rule_s_own_title_patterns()
+    {
+        var matcher = Matcher(new WindowRule { Process = "chrome.exe", TitlePatterns = ["*GitHub*"], ExcludeTitlePatterns = ["*Settings*"] });
+
+        Assert.True(matcher.ShouldCapture("chrome.exe", "Pull requests - GitHub"));
+        Assert.False(matcher.ShouldCapture("chrome.exe", "Settings - GitHub"));
+    }
 }

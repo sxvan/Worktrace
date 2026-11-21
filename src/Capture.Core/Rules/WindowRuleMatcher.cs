@@ -32,7 +32,7 @@ public sealed class WindowRuleMatcher
 
     private static readonly TimeSpan MatchTimeout = TimeSpan.FromMilliseconds(100);
 
-    private sealed record Rule(WindowMode Mode, bool LogTitle, Regex[]? TitlePatterns);
+    private sealed record Rule(WindowMode Mode, bool LogTitle, Regex[]? TitlePatterns, Regex[]? ExcludePatterns);
 
     /// <summary>A rule with this process name applies to every application that has no rule of its own.</summary>
     public const string AnyProcess = "*";
@@ -61,7 +61,11 @@ public sealed class WindowRuleMatcher
                 ? rule.TitlePatterns.Select(ToRegex).ToArray()
                 : null;
 
-            var parsed = new Rule(mode.Value, mode == WindowMode.Capture || rule.LogTitles, patterns);
+            Regex[]? excludes = rule.ExcludeTitlePatterns is { Count: > 0 }
+                ? rule.ExcludeTitlePatterns.Select(ToRegex).ToArray()
+                : null;
+
+            var parsed = new Rule(mode.Value, mode == WindowMode.Capture || rule.LogTitles, patterns, excludes);
             if (process == AnyProcess)
             {
                 _catchAll.Add(parsed);
@@ -133,8 +137,28 @@ public sealed class WindowRuleMatcher
         return false;
     }
 
+    /// <summary>The rule covers the window: a title pattern matches (or it has none), and no exclude pattern does.</summary>
     private static bool Matches(Rule rule, string title)
     {
+        if (rule.ExcludePatterns is not null)
+        {
+            foreach (Regex exclude in rule.ExcludePatterns)
+            {
+                try
+                {
+                    if (exclude.IsMatch(title))
+                    {
+                        return false;
+                    }
+                }
+                catch (RegexMatchTimeoutException)
+                {
+                    // Fail closed: a window that may be excluded is excluded.
+                    return false;
+                }
+            }
+        }
+
         if (rule.TitlePatterns is null)
         {
             return true;
