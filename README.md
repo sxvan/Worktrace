@@ -43,30 +43,11 @@ TimeCapture appears as an icon in the notification area. Its menu lets you pause
 open the captures folder, open the config file, and turn "Start with Windows" on or off. Started from a
 terminal, it also prints what it does there.
 
-## Installer
-
-```powershell
-dotnet build installer -c Release
-```
-
-This produces `installer\bin\Release\TimeCapture-<version>.msi`. The MSI installs for all users into
-`C:\Program Files\TimeCapture`, where only administrators can change the program and its `config.json`.
-
-```powershell
-msiexec /i TimeCapture-<version>.msi /qn   # install without dialogs
-msiexec /x TimeCapture-<version>.msi /qn   # uninstall without dialogs
-```
-
-The installed `config.json` has no rules, so nothing is recorded until an administrator adds some.
-The MSI is not signed.
-
 ## Configuration
 
 TimeCapture reads `config.json` from the folder of `TimeCapture.exe` and does not start without it.
-Changes take effect when TimeCapture is restarted.
-
-- `src/Capture.App/config.json` is used when you build and run from the repo.
-- `installer/config.json` is what the MSI installs.
+Changes take effect when TimeCapture is restarted. When you build and run from the repo, that is
+`src/Capture.App/config.json`.
 
 ### Rules
 
@@ -126,7 +107,6 @@ Inside the storage root:
 | `src/Capture.Storage` | SQLite database, image files, retention |
 | `src/Capture.App` | The tray application |
 | `tests/Capture.Core.Tests` | Unit tests |
-| `installer` | The WiX project for the MSI |
 
 ## License
 
