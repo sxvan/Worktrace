@@ -8,7 +8,7 @@ namespace Capture.Storage;
 /// so encrypted images are unrecoverable even where the disk still holds their old sectors. Recognized text has a retention
 /// period of its own. Window titles and events are kept.
 /// </summary>
-public sealed class RetentionCleaner(string root, CaptureDatabase database, int retentionDays, int textRetentionDays)
+public sealed class RetentionCleaner(string root, CaptureDatabase database, int retentionDays)
 {
     /// <summary>Returns the number of day folders removed.</summary>
     public int Run(DateOnly today)
@@ -34,9 +34,6 @@ public sealed class RetentionCleaner(string root, CaptureDatabase database, int 
 
         database.ClearFilePathsBefore(firstDayToKeep);
         database.DeleteDayKeysBefore(firstDayToKeep);
-
-        DateOnly firstTextDayToKeep = today.AddDays(-Math.Max(0, textRetentionDays));
-        database.DeleteTextBefore(new DateTimeOffset(firstTextDayToKeep.ToDateTime(TimeOnly.MinValue, DateTimeKind.Local)));
         return removed;
     }
 }

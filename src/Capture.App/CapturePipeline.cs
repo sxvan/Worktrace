@@ -9,10 +9,10 @@ namespace Capture.App;
 /// <summary>
 /// Everything after the capture itself, on one background thread at below-normal priority:
 ///
-///   dedupe -> IRedactor -> encode -> IImageStore -> database
+///   dedupe -> encode and encrypt (IImageStore) -> database
 ///
-/// What is kept of a window follows the layers in the config: the recognized text (storeText)
-/// and the image itself (storeImages). Window title and placement are always recorded.
+/// Window title and placement are always recorded; the image only if storeImages is on. No text
+/// is recognized and nothing is redacted here: that happens on demand when an image is read.
 ///
 /// Captures are queued so encoding never holds up event handling. If encoding falls behind,
 /// new captures are dropped instead of piling up in memory.
@@ -23,21 +23,16 @@ public sealed class CapturePipeline : IDisposable
 
     private sealed record Job(CaptureDecision Decision, CaptureResult Capture, long CaptureMs);
 
-    private readonly IRedactor _redactor;
     private readonly IImageStore _imageStore;
     private readonly CaptureDatabase _database;
     private readonly Deduplicator _deduplicator;
     private readonly bool _storeImages;
-    private readonly bool _storeText;
     private readonly BlockingCollection<Job> _queue = new(MaxQueuedCaptures);
     private readonly Thread _thread;
 
-    public CapturePipeline(
-        IRedactor redactor, IImageStore imageStore, CaptureDatabase database, int dedupeThreshold, bool storeImages, bool storeText)
+    public CapturePipeline(IImageStore imageStore, CaptureDatabase database, int dedupeThreshold, bool storeImages)
     {
         _storeImages = storeImages;
-        _storeText = storeText;
-        _redactor = redactor;
         _imageStore = imageStore;
         _database = database;
         _deduplicator = new Deduplicator(dedupeThreshold);
@@ -123,7 +118,6 @@ public sealed class CapturePipeline : IDisposable
         var records = new List<CapturedWindowRecord>();
         var writtenFiles = new List<string>();
         var windowSizes = new List<(int Width, int Height)>();
-        int redactions = 0, dropped = 0;
         DateOnly day = DateOnly.FromDateTime(job.Decision.Timestamp.LocalDateTime);
 
         try
@@ -136,8 +130,7 @@ public sealed class CapturePipeline : IDisposable
                 bool focused = handle == job.Capture.FocusedWindowHandle;
                 int width = raw.Width, height = raw.Height;
 
-                // Dedupe first: an unchanged window is not saved, so there is nothing to redact.
-                // Only the 64-bit hash of the unredacted image is kept.
+                // Dedupe first: an unchanged window is not saved again. The 64-bit hash goes to the database.
                 ulong hash = DHash.Compute(raw.Pixels, width, height);
                 long? duplicateOf = _deduplicator.FindDuplicate(handle, width, height, hash, day);
                 if (duplicateOf is not null)
@@ -147,44 +140,21 @@ public sealed class CapturePipeline : IDisposable
                     continue;
                 }
 
-                if (!_storeImages && !_storeText)
-                {
-                    // Nothing of the content is kept, so there is nothing to check.
-                    records.Add(new CapturedWindowRecord(raw.Placement, focused, width, height, hash, null, null));
-                    windowSizes.Add((width, height));
-                    continue;
-                }
-
-                RedactionResult redaction = _redactor.RedactAsync(raw, CancellationToken.None).AsTask().GetAwaiter().GetResult();
-                if (redaction.Image is null)
-                {
-                    dropped++;
-                    CaptureReporter.WindowDroppedByRedaction(redaction.DropReason);
-                    continue;
-                }
-
-                using RedactedWindowImage image = redaction.Image;
                 SavedImage? saved = null;
                 if (_storeImages)
                 {
-                    saved = _imageStore.Save(image, sequence);
+                    saved = _imageStore.Save(raw, sequence);
                     writtenFiles.Add(saved.RelativePath);
                 }
-                redactions += image.RedactionCount;
 
                 // Width and height describe the saved file, which can be scaled down.
                 records.Add(new CapturedWindowRecord(
-                    image.Placement, focused, saved?.Width ?? width, saved?.Height ?? height, hash, saved?.RelativePath, null,
-                    image.RedactionCount, _storeText ? image.Text : null));
+                    raw.Placement, focused, saved?.Width ?? width, saved?.Height ?? height, hash, saved?.RelativePath, null));
                 windowSizes.Add((width, height));
             }
 
             if (records.Count == 0)
             {
-                if (dropped > 0)
-                {
-                    CaptureReporter.NothingSaved(job.Decision, dropped);
-                }
                 return;
             }
 
@@ -193,8 +163,8 @@ public sealed class CapturePipeline : IDisposable
 
             for (int i = 0; i < records.Count; i++)
             {
-                // Later duplicates can point at a window whose image or text was kept.
-                if (records[i].DedupeReferenceId is null && (records[i].FilePath is not null || records[i].Text is not null))
+                // Later duplicates can point at a window whose image was kept.
+                if (records[i].DedupeReferenceId is null && records[i].FilePath is not null)
                 {
                     _deduplicator.Remember(
                         records[i].Placement.Window.Handle, windowSizes[i].Width, windowSizes[i].Height, records[i].DHash, day, ids[i]);
@@ -218,8 +188,7 @@ public sealed class CapturePipeline : IDisposable
             throw;
         }
 
-        CaptureReporter.Stored(
-            job.Decision, records.Count, writtenFiles.Count, redactions, dropped, job.CaptureMs, stopwatch.ElapsedMilliseconds);
+        CaptureReporter.Stored(job.Decision, records.Count, writtenFiles.Count, job.CaptureMs, stopwatch.ElapsedMilliseconds);
     }
 
     private static void DisposeImages(CaptureResult capture)

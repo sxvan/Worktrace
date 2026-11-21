@@ -6,7 +6,7 @@ using ImageMagick;
 namespace Capture.Storage;
 
 /// <summary>
-/// Encodes redacted window images as lossless PNG and writes them to
+/// Encodes captured window images as lossless PNG and writes them to
 /// captures\yyyy-MM-dd\HHmmss_fff_wN_Process.png (local time) under the storage root.
 /// This is the only place image data is written to disk.
 ///
@@ -16,8 +16,12 @@ namespace Capture.Storage;
 ///
 /// With a <see cref="DayKeyStore"/>, every image is encrypted in memory before it is written
 /// (see <see cref="ImageCipher"/>) and gets the extension .png.enc: no plaintext image ever
-/// touches the disk, not even as a temporary file. <see cref="Read"/> decrypts again; it also
-/// reads encrypted images when <paramref name="encrypt"/> is off, as long as the keys are there.
+/// touches the disk, not even as a temporary file.
+///
+/// Images are stored unredacted: nothing is recognized or blacked out at capture time. Reading
+/// them back is therefore internal (<see cref="ReadUnredacted"/>, <see cref="ExportDay"/>, for the
+/// app's own "Export day…"). Any path that hands images or their text to something else must go
+/// through on-demand text recognition and redaction first.
 /// </summary>
 public sealed class FileImageStore(string root, int maxDimension, DayKeyStore? keys = null, bool encrypt = true) : IImageStore
 {
@@ -27,7 +31,7 @@ public sealed class FileImageStore(string root, int maxDimension, DayKeyStore? k
     public const string DayFolderFormat = "yyyy-MM-dd";
     public const string EncryptedExtension = ".enc";
 
-    public SavedImage Save(RedactedWindowImage image, int sequence)
+    public SavedImage Save(RawWindowImage image, int sequence)
     {
         DateTime local = image.Timestamp.LocalDateTime;
         string process = SafeFileNamePart(Path.GetFileNameWithoutExtension(image.Placement.Window.ProcessName ?? "window"));
@@ -63,10 +67,11 @@ public sealed class FileImageStore(string root, int maxDimension, DayKeyStore? k
 
     /// <summary>
     /// The image file as an image again (PNG, or AVIF from earlier versions), decrypted if it is
-    /// encrypted. Throws <see cref="CryptographicException"/> if the day's key is gone or the file
-    /// was changed, moved or swapped.
+    /// encrypted, NOT redacted. Throws <see cref="CryptographicException"/> if the day's key is
+    /// gone or the file was changed, moved or swapped. Works also when encryption of new images is
+    /// off, as long as the keys are there.
     /// </summary>
-    public byte[] Read(string relativePath)
+    internal byte[] ReadUnredacted(string relativePath)
     {
         byte[] file = File.ReadAllBytes(Path.Combine(root, relativePath));
         if (!relativePath.EndsWith(EncryptedExtension, StringComparison.OrdinalIgnoreCase))
@@ -107,10 +112,10 @@ public sealed class FileImageStore(string root, int maxDimension, DayKeyStore? k
     }
 
     /// <summary>
-    /// Writes the images of one day, decrypted, into <paramref name="targetFolder"/>. Returns how
-    /// many images were written and how many could not be read.
+    /// Writes the images of one day, decrypted but NOT redacted, into <paramref name="targetFolder"/>,
+    /// for the user to look at. Returns how many images were written and how many could not be read.
     /// </summary>
-    public (int Exported, int Failed) ExportDay(DateOnly day, string targetFolder)
+    internal (int Exported, int Failed) ExportDay(DateOnly day, string targetFolder)
     {
         string dayName = day.ToString(DayFolderFormat, CultureInfo.InvariantCulture);
         string folder = Path.Combine(root, CapturesFolderName, dayName);
@@ -130,7 +135,7 @@ public sealed class FileImageStore(string root, int maxDimension, DayKeyStore? k
             }
             try
             {
-                byte[] image = Read(Path.Combine(CapturesFolderName, dayName, name));
+                byte[] image = ReadUnredacted(Path.Combine(CapturesFolderName, dayName, name));
                 string targetName = name.EndsWith(EncryptedExtension, StringComparison.OrdinalIgnoreCase)
                     ? name[..^EncryptedExtension.Length]
                     : name;
@@ -165,7 +170,7 @@ public sealed class FileImageStore(string root, int maxDimension, DayKeyStore? k
         }
     }
 
-    private byte[] Encode(RedactedWindowImage image, out int width, out int height)
+    private byte[] Encode(RawWindowImage image, out int width, out int height)
     {
         width = image.Width;
         height = image.Height;

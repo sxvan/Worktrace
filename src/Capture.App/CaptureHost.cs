@@ -66,21 +66,6 @@ internal static class CaptureHost
             Console.WriteLine($"Note: no rules in {paths.ConfigFile}; nothing will be recorded until you add some.");
         }
 
-        IRedactor? redactor = CreateRedactor(config);
-        if (redactor is null)
-        {
-            // Without text recognition nothing can be checked, so nothing may be saved.
-            Log.Fatal("No OCR language installed; refusing to capture");
-            return AppConsole.Fail(4, "Secret redaction is on, but Windows has no OCR language installed. "
-                                      + "Install one (Settings > Time & language > Language) or set redactSecrets to false.");
-        }
-
-        if (config.StoreText && !config.RedactSecrets)
-        {
-            Log.Warning("storeText needs redactSecrets; no text will be stored");
-            Console.WriteLine("Note: storeText needs redactSecrets; no recognized text will be stored.");
-        }
-
         using var database = new CaptureDatabase(paths.DatabaseFile, new TextScrubber([new HeuristicSecretDetector()], config.StripUrlQueries));
         var tracker = new ActivityTracker(TimeSpan.FromSeconds(config.IdleTimeoutSeconds));
         var rules = new WindowRuleMatcher(config.Rules);
@@ -103,7 +88,7 @@ internal static class CaptureHost
             Console.WriteLine("Note: borderless capture was denied; captured windows will show a border.");
         }
 
-        using Timer retentionTimer = StartRetention(paths, database, config.RetentionDays, config.TextRetentionDays);
+        using Timer retentionTimer = StartRetention(paths, database, config.RetentionDays);
 
         // The keys are always available for reading; encryptImages decides whether new images are encrypted.
         var imageStore = new FileImageStore(
@@ -114,13 +99,7 @@ internal static class CaptureHost
             Console.WriteLine("Note: encryptImages is false; screenshots are stored unencrypted.");
         }
 
-        using var pipeline = new CapturePipeline(
-            redactor,
-            imageStore,
-            database,
-            config.DedupeThreshold,
-            config.StoreImages,
-            config.StoreText && config.RedactSecrets);
+        using var pipeline = new CapturePipeline(imageStore, database, config.DedupeThreshold, config.StoreImages);
 
         var coordinator = new CaptureCoordinator(
             signals,
@@ -163,30 +142,10 @@ internal static class CaptureHost
         return 0;
     }
 
-    /// <summary>The redactor the config asks for, or null if redaction is on but cannot work on this machine.</summary>
-    private static IRedactor? CreateRedactor(CaptureConfig config)
-    {
-        if (!config.RedactSecrets)
-        {
-            Log.Warning("Secret redaction is switched off in the config");
-            Console.WriteLine("Secret redaction: OFF (redactSecrets is false)");
-            return new PassThroughRedactor();
-        }
-
-        WindowsOcrRecognizer? recognizer = WindowsOcrRecognizer.TryCreate();
-        if (recognizer is null)
-        {
-            return null;
-        }
-
-        Console.WriteLine($"Secret redaction: on (text recognition language {recognizer.LanguageTag})");
-        return new TextRedactor(recognizer, [new HeuristicSecretDetector()], config.StripUrlQueries);
-    }
-
     /// <summary>Retention runs on startup and once per day.</summary>
-    private static Timer StartRetention(AppPaths paths, CaptureDatabase database, int retentionDays, int textRetentionDays)
+    private static Timer StartRetention(AppPaths paths, CaptureDatabase database, int retentionDays)
     {
-        var retention = new RetentionCleaner(paths.Root, database, retentionDays, textRetentionDays);
+        var retention = new RetentionCleaner(paths.Root, database, retentionDays);
         return new Timer(_ =>
         {
             try

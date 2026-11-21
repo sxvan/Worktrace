@@ -7,8 +7,8 @@ namespace Capture.Core.Redaction;
 /// <summary>
 /// Turns text into the form that may be stored as text: words the secret detectors flag become
 /// "[redacted]". Optionally, URLs also lose their query string and fragment, where tokens and
-/// session ids the detectors do not recognize can hide. Used for window titles (layer 1) and for
-/// recognized screen text (layer 2).
+/// session ids the detectors do not recognize can hide. Used for window titles; screen content is
+/// not recognized at capture time.
 /// </summary>
 public sealed class TextScrubber(IReadOnlyList<ISecretDetector> detectors, bool stripUrlQueries = false)
 {
@@ -50,13 +50,6 @@ public sealed class TextScrubber(IReadOnlyList<ISecretDetector> detectors, bool 
         IReadOnlyList<RecognizedLine> lines = [new RecognizedLine(words)];
         return Join(words, Hidden(words, FindSecrets(lines)));
     }
-
-    /// <summary>
-    /// Scrubs a row of recognized words, given the regions the detectors already found for the
-    /// whole image. A word counts as hidden if a region covers at least half of it.
-    /// </summary>
-    public string ScrubWords(IReadOnlyList<RecognizedWord> words, IReadOnlyList<RectInt> secretRegions) =>
-        Join(words, Hidden(words, secretRegions));
 
     public IReadOnlyList<RectInt> FindSecrets(IReadOnlyList<RecognizedLine> lines)
     {
