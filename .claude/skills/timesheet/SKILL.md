@@ -51,8 +51,11 @@ description: Build timesheet entries for a day from TimeCapture's recording and 
      browsing and tool setup. Columns: project, start, end, duration, focused minutes, source
      (visits, sessions, screenshot), and the entry text.
    - Mark blocks that are possibly not work with "⚠ evtl. nicht Arbeit" and a few words why
-     (e.g. game, YouTube). Do not leave them out and do not count them in the work total; show
-     them in a second total so the user can move them over.
+     (e.g. game, YouTube). Do not leave them out and do not count them in the work total.
+   - End the table with summary rows, computed from the rounded entries in the table (not from
+     the raw visits): "Total Arbeit" (all unmarked blocks; where blocks overlap, count the time
+     once, as you would book it) and "Total evtl. nicht Arbeit" (the marked blocks), each with
+     its duration in the Dauer column.
    - Overlapping blocks (parallel sessions in two projects) are reported as they are, marked as
      overlapping; say which one you would book.
    - The entry text is in Swiss Standard German (de-CH: "ss", never "ß"), short and concrete,
