@@ -26,3 +26,4 @@ IUIAutomation
 CUIAutomation
 IUIAutomationElement
 GetClassName
+GetLayeredWindowAttributes
