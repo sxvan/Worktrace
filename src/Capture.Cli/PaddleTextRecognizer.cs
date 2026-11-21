@@ -24,6 +24,9 @@ internal sealed class PaddleTextRecognizer : ITextRecognizer, IDisposable
 
     public PaddleTextRecognizer()
     {
+        // Paddle's native logging (glog) writes info and deprecation warnings to stderr, which
+        // Claude reads. Errors only; this must be set before the native library is first used.
+        Environment.SetEnvironmentVariable("GLOG_minloglevel", "2");
         _ocr = new PaddleOcrAll(LocalFullModels.LatinV5, PaddleDevice.Mkldnn())
         {
             AllowRotateDetection = false,

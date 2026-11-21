@@ -173,7 +173,9 @@ internal static class Program
         Application.EnableVisualStyles();
         if (!ScreenshotReview.Ask(redactedPng, screenshot, text))
         {
-            Console.WriteLine($"The user did not share screenshot {screenshot.WindowId}. Do not ask for it again; work with what you have or ask the user.");
+            Console.WriteLine(
+                $"The user did not share screenshot {screenshot.WindowId}. Do not ask for this one again. "
+                + "You may ask for a screenshot from a different moment if it would answer the question, or ask the user.");
             return ExitDeclined;
         }
 

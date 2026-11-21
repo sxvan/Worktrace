@@ -32,8 +32,9 @@ description: Build timesheet entries for a day from TimeCapture's recording and 
    Run it with a Bash timeout of 600000 ms: it opens a window in which the user reviews the
    recognized text and the redacted image, and waits for them. Tell the user beforehand which
    screenshot you are asking for and why. If they share it, the output gives the path of the
-   redacted PNG (read it) and the text with positions. Exit code 3 means they declined: do not ask
-   for the same screenshot again, and work with what you have or ask the user.
+   redacted PNG (read it) and the text with positions. Exit code 3 means they declined that one
+   screenshot: do not ask for it again. You may ask for one from a different moment (another id
+   or time) if it would settle the question, or ask the user directly.
 
    Ask for as few screenshots as possible, one at a time.
 
