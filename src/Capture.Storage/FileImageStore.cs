@@ -71,20 +71,34 @@ public sealed class FileImageStore(string root, int maxDimension, DayKeyStore? k
     /// gone or the file was changed, moved or swapped. Works also when encryption of new images is
     /// off, as long as the keys are there.
     /// </summary>
-    internal byte[] ReadUnredacted(string relativePath)
+    internal byte[] ReadUnredacted(string relativePath) =>
+        ReadUnredacted(root, relativePath, keys is null ? null : keys.Find);
+
+    /// <summary>
+    /// Reads one image file below <paramref name="root"/>, decrypted with the day key that
+    /// <paramref name="findKey"/> returns, NOT redacted. Only files inside the captures folder are read.
+    /// </summary>
+    internal static byte[] ReadUnredacted(string root, string relativePath, Func<DateOnly, byte[]?>? findKey)
     {
-        byte[] file = File.ReadAllBytes(Path.Combine(root, relativePath));
+        string fullPath = Path.GetFullPath(Path.Combine(root, relativePath));
+        string capturesRoot = Path.GetFullPath(Path.Combine(root, CapturesFolderName)) + Path.DirectorySeparatorChar;
+        if (!fullPath.StartsWith(capturesRoot, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new IOException($"{relativePath} is not inside the captures folder.");
+        }
+
+        byte[] file = File.ReadAllBytes(fullPath);
         if (!relativePath.EndsWith(EncryptedExtension, StringComparison.OrdinalIgnoreCase))
         {
             return file;
         }
-        if (keys is null)
+        if (findKey is null)
         {
             throw new CryptographicException("No day keys available, so encrypted images cannot be read.");
         }
         DateOnly day = DayOf(relativePath)
                        ?? throw new CryptographicException("The image is not in a day folder, so its key is unknown.");
-        byte[] key = keys.Find(day)
+        byte[] key = findKey(day)
                      ?? throw new CryptographicException($"There is no key for {day:yyyy-MM-dd}; its images can no longer be decrypted.");
         try
         {
