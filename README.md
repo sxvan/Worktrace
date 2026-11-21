@@ -83,7 +83,8 @@ Changes take effect when TimeCapture is restarted. When you build and run from t
 
 When an application has rules of its own, only those decide. A `log` rule for one application therefore
 exempts it from a `*` rule that captures everything else. If several rules match a window, `capture`
-wins over `log`. The `*` rule skips windows without a title.
+wins over `log`. The `*` rule skips windows without a title. Invisible overlays, such as the NVIDIA overlay, are
+never captured and do not hide the windows below them.
 
 ### Settings
 

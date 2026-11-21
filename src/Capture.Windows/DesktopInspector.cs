@@ -67,15 +67,12 @@ public static class DesktopInspector
 
             var (capturable, process, title) = Classify(hwnd, rules, capturableByHandle, depth: 0);
 
-            // Click-through layered windows are overlays (GPU tools, screen annotation, ...) that
-            // hide nothing. Treating them as transparent only affects which parts of capturable
-            // windows count as visible; a other window is never captured either way.
-            int exStyle = PInvoke.GetWindowLong(hwnd, WINDOW_LONG_PTR_INDEX.GWL_EXSTYLE);
-            bool clickThroughOverlay = (exStyle & WS_EX_TRANSPARENT) != 0 && (exStyle & WS_EX_LAYERED) != 0;
-
+            // An invisible overlay hides nothing, so it never counts as covering the windows below
+            // it. Classify never makes one capturable. A GPU overlay that spans a whole monitor
+            // would otherwise black out every captured window on that monitor.
             result.Add(new WindowInfo(
                 (long)(nint)hwnd, bounds, ToRect(windowRect), result.Count,
-                capturable, IsCovering: capturable || !clickThroughOverlay,
+                capturable, IsCovering: !IsInvisibleOverlay(hwnd),
                 capturable ? process : null, capturable ? title : null));
         }
 
@@ -125,10 +122,11 @@ public static class DesktopInspector
 
         (bool Capturable, string? Process, string? Title) result = (false, null, null);
 
-        // Never captured, whatever the rules say: this app's own windows (its tray menu) and the
-        // Windows shell (desktop, taskbar). They still count as covering what is behind them.
+        // Never captured, whatever the rules say: this app's own windows (its tray menu), the
+        // Windows shell (desktop, taskbar) and invisible overlays, which show nothing and take no
+        // input. The first two still count as covering what is behind them.
         uint processId = GetProcessId(hwnd);
-        if (processId == Environment.ProcessId || IsShellWindow(hwnd))
+        if (processId == Environment.ProcessId || IsShellWindow(hwnd) || IsInvisibleOverlay(hwnd))
         {
             cache[hwnd] = result;
             return result;
@@ -160,6 +158,30 @@ public static class DesktopInspector
 
         cache[hwnd] = result;
         return result;
+    }
+
+    /// <summary>
+    /// Layered windows that show nothing of what is below them as hidden: click-through overlays
+    /// (GPU tools such as the NVIDIA overlay, screen annotation, ...) and layered windows made
+    /// fully transparent.
+    /// </summary>
+    private static unsafe bool IsInvisibleOverlay(HWND hwnd)
+    {
+        int exStyle = PInvoke.GetWindowLong(hwnd, WINDOW_LONG_PTR_INDEX.GWL_EXSTYLE);
+        if ((exStyle & WS_EX_LAYERED) == 0)
+        {
+            return false;
+        }
+        if ((exStyle & WS_EX_TRANSPARENT) != 0)
+        {
+            return true;
+        }
+
+        byte alpha = 0;
+        LAYERED_WINDOW_ATTRIBUTES_FLAGS flags = 0;
+        return PInvoke.GetLayeredWindowAttributes(hwnd, null, &alpha, &flags)
+               && (flags & LAYERED_WINDOW_ATTRIBUTES_FLAGS.LWA_ALPHA) != 0
+               && alpha == 0;
     }
 
     private static readonly HashSet<string> ShellWindowClasses = new(StringComparer.Ordinal)
