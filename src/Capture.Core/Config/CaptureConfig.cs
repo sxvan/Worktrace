@@ -31,7 +31,24 @@ public sealed class CaptureConfig
     /// </summary>
     public List<WindowRule> Rules { get; set; } = [];
 
+    /// <summary>Screenshots older than this many days are deleted (layer 3).</summary>
     public int RetentionDays { get; set; } = 14;
+
+    /// <summary>
+    /// Store the recognized text of each captured window, with secrets replaced and positions
+    /// relative to the window (layer 2). Needs <see cref="RedactSecrets"/>: only text that went
+    /// through the secret check is stored.
+    /// </summary>
+    public bool StoreText { get; set; } = true;
+
+    /// <summary>Recognized text older than this many days is deleted.</summary>
+    public int TextRetentionDays { get; set; } = 30;
+
+    /// <summary>
+    /// Save the screenshots themselves (layer 3). Off keeps window titles and recognized text only:
+    /// text the recognizer missed is then gone instead of visible in an image.
+    /// </summary>
+    public bool StoreImages { get; set; } = true;
 
     public int ImageQuality { get; set; } = 40;
 

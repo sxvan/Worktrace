@@ -11,6 +11,9 @@ namespace Capture.App;
 ///
 ///   dedupe -> IRedactor -> encode -> IImageStore -> database
 ///
+/// What is kept of a window follows the layers in the config: the recognized text (storeText)
+/// and the image itself (storeImages). Window title and placement are always recorded.
+///
 /// Captures are queued so encoding never holds up event handling. If encoding falls behind,
 /// new captures are dropped instead of piling up in memory.
 /// </summary>
@@ -24,11 +27,16 @@ public sealed class CapturePipeline : IDisposable
     private readonly IImageStore _imageStore;
     private readonly CaptureDatabase _database;
     private readonly Deduplicator _deduplicator;
+    private readonly bool _storeImages;
+    private readonly bool _storeText;
     private readonly BlockingCollection<Job> _queue = new(MaxQueuedCaptures);
     private readonly Thread _thread;
 
-    public CapturePipeline(IRedactor redactor, IImageStore imageStore, CaptureDatabase database, int dedupeThreshold)
+    public CapturePipeline(
+        IRedactor redactor, IImageStore imageStore, CaptureDatabase database, int dedupeThreshold, bool storeImages, bool storeText)
     {
+        _storeImages = storeImages;
+        _storeText = storeText;
         _redactor = redactor;
         _imageStore = imageStore;
         _database = database;
@@ -139,6 +147,14 @@ public sealed class CapturePipeline : IDisposable
                     continue;
                 }
 
+                if (!_storeImages && !_storeText)
+                {
+                    // Nothing of the content is kept, so there is nothing to check.
+                    records.Add(new CapturedWindowRecord(raw.Placement, focused, width, height, hash, null, null));
+                    windowSizes.Add((width, height));
+                    continue;
+                }
+
                 RedactionResult redaction = _redactor.RedactAsync(raw, CancellationToken.None).AsTask().GetAwaiter().GetResult();
                 if (redaction.Image is null)
                 {
@@ -148,13 +164,18 @@ public sealed class CapturePipeline : IDisposable
                 }
 
                 using RedactedWindowImage image = redaction.Image;
-                SavedImage saved = _imageStore.Save(image, sequence);
-                writtenFiles.Add(saved.RelativePath);
+                SavedImage? saved = null;
+                if (_storeImages)
+                {
+                    saved = _imageStore.Save(image, sequence);
+                    writtenFiles.Add(saved.RelativePath);
+                }
                 redactions += image.RedactionCount;
 
                 // Width and height describe the saved file, which can be scaled down.
                 records.Add(new CapturedWindowRecord(
-                    image.Placement, focused, saved.Width, saved.Height, hash, saved.RelativePath, null, image.RedactionCount));
+                    image.Placement, focused, saved?.Width ?? width, saved?.Height ?? height, hash, saved?.RelativePath, null,
+                    image.RedactionCount, _storeText ? image.Text : null));
                 windowSizes.Add((width, height));
             }
 
@@ -172,7 +193,8 @@ public sealed class CapturePipeline : IDisposable
 
             for (int i = 0; i < records.Count; i++)
             {
-                if (records[i].FilePath is not null)
+                // Later duplicates can point at a window whose image or text was kept.
+                if (records[i].DedupeReferenceId is null && (records[i].FilePath is not null || records[i].Text is not null))
                 {
                     _deduplicator.Remember(
                         records[i].Placement.Window.Handle, windowSizes[i].Width, windowSizes[i].Height, records[i].DHash, day, ids[i]);
