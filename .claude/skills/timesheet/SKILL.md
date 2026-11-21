@@ -21,8 +21,9 @@ description: Build timesheet entries for a day from TimeCapture's recording and 
    - `git log` in the repos named there can add what was committed.
 
 2. **Assign the visits to projects** from window titles, session folders, branches and prompts.
-   Leave out what is clearly not work. If a session's prompts do not say enough, read that one
-   session's transcript (the `transcript:` path), not all of them: they are large.
+   If a session's prompts do not say enough, read that one session's transcript (the
+   `transcript:` path), not all of them: they are large. Do not decide what counts as work and
+   drop the rest: every activity of the day goes into the report (step 4). The user decides.
 
 3. **Ask for a screenshot only when that data cannot settle it**, for example a browser title that
    names no project, or a long stretch in one generic window. Take an id from `shots`, or a time:
@@ -46,8 +47,17 @@ description: Build timesheet entries for a day from TimeCapture's recording and 
    - Bridge gaps between visits to the same project of at most 10 minutes; never bridge idle or
      lock periods. Longer gaps split the block.
    - Round each block's start and end to the nearest 15 minutes; drop blocks that round to zero.
-   - Output one entry per block: project, start, end, duration, and the total. Show the focused
-     minutes next to each block.
+   - Report every block of the day in one table, in time order, including games, video, private
+     browsing and tool setup. Columns: project, start, end, duration, focused minutes, source
+     (visits, sessions, screenshot), and the entry text.
+   - Mark blocks that are possibly not work with "⚠ evtl. nicht Arbeit" and a few words why
+     (e.g. game, YouTube). Do not leave them out and do not count them in the work total; show
+     them in a second total so the user can move them over.
+   - Overlapping blocks (parallel sessions in two projects) are reported as they are, marked as
+     overlapping; say which one you would book.
+   - The entry text is in Swiss Standard German (de-CH: "ss", never "ß"), short and concrete,
+     what was done, not how: a few words to one short sentence, no filler. For example:
+     "CI-Gate für PRs eingerichtet, release-please aufgesetzt" or "Glove: Umbenennung geprüft".
 
 ## Rules
 

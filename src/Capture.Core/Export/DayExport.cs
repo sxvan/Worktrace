@@ -36,7 +36,7 @@ public static class DayExport
             text.Append(visit.Kind switch
             {
                 VisitKind.Window => $"{visit.ProcessName} \"{visit.WindowTitle}\"",
-                VisitKind.Other => "(application without a rule)",
+                VisitKind.Other => "(window not recorded: no rule matches it, e.g. no title, or nothing capturable on screen)",
                 VisitKind.Idle => "(idle)",
                 VisitKind.Locked => "(locked)",
                 VisitKind.Asleep => "(asleep)",
