@@ -47,6 +47,8 @@ description: Build timesheet entries for a day from TimeCapture's recording and 
    - First group the visits and session spans by project into blocks, bridging gaps of at most
      10 minutes (never across idle or lock). Then round each block's start and end to the
      nearest 15 minutes; a block is at least 15 minutes long.
+   - After rounding, merge consecutive blocks of the same project whose rounded times touch (one
+     ends where the next starts) into one block.
    - Report every block of the day in one table, in time order, including games, video, private
      browsing and tool setup. Columns: project, start, end, duration, focused minutes, source
      (visits, sessions, screenshot), and the entry text.
