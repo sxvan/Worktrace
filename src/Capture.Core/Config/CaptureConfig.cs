@@ -51,6 +51,12 @@ public sealed class CaptureConfig
     public bool StoreImages { get; set; } = true;
 
     /// <summary>
+    /// Encrypt the saved screenshots (AES-GCM, one key per day, keys protected by the Windows
+    /// login through DPAPI). Off writes plain PNG files; images encrypted earlier stay readable.
+    /// </summary>
+    public bool EncryptImages { get; set; } = true;
+
+    /// <summary>
     /// Saved images (lossless PNG) are scaled down so their longer side is at most this many
     /// pixels. 0, the default, keeps the original size: scaled-down screen text soon becomes
     /// unreadable for text recognition.

@@ -53,6 +53,8 @@ public sealed class CaptureDatabase : IDisposable
         Execute("PRAGMA journal_mode=WAL;");
         Execute("PRAGMA synchronous=NORMAL;");
         Execute("PRAGMA foreign_keys=ON;");
+        // Deleted rows (day keys, text) are overwritten, not just unlinked.
+        Execute("PRAGMA secure_delete=ON;");
         Execute("""
             CREATE TABLE IF NOT EXISTS events (
                 id            INTEGER PRIMARY KEY,
@@ -128,7 +130,14 @@ public sealed class CaptureDatabase : IDisposable
             );
             CREATE INDEX IF NOT EXISTS ix_capture_text_window ON capture_text(capture_window_id);
 
-            PRAGMA user_version=4;
+            -- One encryption key per day for the stored images, wrapped with DPAPI (never in the
+            -- clear). Retention deletes the rows of expired days, which makes their images unrecoverable.
+            CREATE TABLE IF NOT EXISTS day_keys (
+                day         TEXT PRIMARY KEY,   -- local date, yyyy-MM-dd
+                wrapped_key BLOB NOT NULL
+            );
+
+            PRAGMA user_version=5;
             """);
     }
 
@@ -251,6 +260,51 @@ public sealed class CaptureDatabase : IDisposable
             return command.ExecuteNonQuery();
         }
     }
+
+    /// <summary>The wrapped key of <paramref name="day"/>, or null if there is none.</summary>
+    public byte[]? GetWrappedDayKey(DateOnly day)
+    {
+        lock (_lock)
+        {
+            using SqliteCommand command = _connection.CreateCommand();
+            command.CommandText = "SELECT wrapped_key FROM day_keys WHERE day = $day;";
+            command.Parameters.AddWithValue("$day", DayText(day));
+            return command.ExecuteScalar() as byte[];
+        }
+    }
+
+    /// <summary>Stores the wrapped key unless the day has one already; returns the one that is stored.</summary>
+    public byte[] InsertDayKeyIfMissing(DateOnly day, byte[] wrappedKey)
+    {
+        lock (_lock)
+        {
+            using (SqliteCommand insert = _connection.CreateCommand())
+            {
+                insert.CommandText = "INSERT OR IGNORE INTO day_keys (day, wrapped_key) VALUES ($day, $key);";
+                insert.Parameters.AddWithValue("$day", DayText(day));
+                insert.Parameters.AddWithValue("$key", wrappedKey);
+                insert.ExecuteNonQuery();
+            }
+            using SqliteCommand select = _connection.CreateCommand();
+            select.CommandText = "SELECT wrapped_key FROM day_keys WHERE day = $day;";
+            select.Parameters.AddWithValue("$day", DayText(day));
+            return (byte[])select.ExecuteScalar()!;
+        }
+    }
+
+    /// <summary>Deletes the keys of all days before <paramref name="firstDayToKeep"/>. Returns the number of keys removed.</summary>
+    public int DeleteDayKeysBefore(DateOnly firstDayToKeep)
+    {
+        lock (_lock)
+        {
+            using SqliteCommand command = _connection.CreateCommand();
+            command.CommandText = "DELETE FROM day_keys WHERE day < $day;";
+            command.Parameters.AddWithValue("$day", DayText(firstDayToKeep));
+            return command.ExecuteNonQuery();
+        }
+    }
+
+    private static string DayText(DateOnly day) => day.ToString(FileImageStore.DayFolderFormat, CultureInfo.InvariantCulture);
 
     /// <summary>Deletes the recognized text of all captures before <paramref name="cutoff"/>. Returns the number of rows removed.</summary>
     public int DeleteTextBefore(DateTimeOffset cutoff)

@@ -1,4 +1,4 @@
-using System.Text.Json;
+﻿using System.Text.Json;
 using Capture.Core.Config;
 
 namespace Capture.App;
@@ -13,11 +13,15 @@ public sealed class AppPaths
         AllowTrailingCommas = true,
     };
 
-    private AppPaths(string configFile, string root)
+    private AppPaths(string configFile, string root, IReadOnlyList<string> warnings)
     {
         ConfigFile = configFile;
         Root = root;
+        Warnings = warnings;
     }
+
+    /// <summary>Problems found while protecting the storage root, for the log and the console.</summary>
+    public IReadOnlyList<string> Warnings { get; }
 
     /// <summary>
     /// config.json next to the executable. Its source is src/Capture.App/config.json; the build
@@ -48,8 +52,10 @@ public sealed class AppPaths
         string root = string.IsNullOrWhiteSpace(config.StorageRoot)
             ? DefaultRoot
             : Environment.ExpandEnvironmentVariables(config.StorageRoot);
+        bool justCreated = !Directory.Exists(root);
         Directory.CreateDirectory(root);
+        IReadOnlyList<string> warnings = StorageProtection.Apply(root, justCreated);
 
-        return (new AppPaths(configFile, root), config);
+        return (new AppPaths(configFile, root, warnings), config);
     }
 }

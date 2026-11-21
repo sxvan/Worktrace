@@ -3,6 +3,7 @@ using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.Runtime.InteropServices;
 using System.Windows.Forms;
+using Capture.Storage;
 using Serilog;
 
 namespace Capture.App;
@@ -15,6 +16,7 @@ public sealed class TrayApplication : ApplicationContext
 {
     private readonly CaptureCoordinator _coordinator;
     private readonly AppPaths _paths;
+    private readonly FileImageStore _images;
     private readonly NotifyIcon _notifyIcon;
     private readonly Control _marshal = new();
     private readonly Dictionary<CaptureState, Icon> _icons;
@@ -22,10 +24,11 @@ public sealed class TrayApplication : ApplicationContext
     private readonly ToolStripMenuItem _resumeItem;
     private readonly ToolStripMenuItem _autostartItem;
 
-    public TrayApplication(CaptureCoordinator coordinator, AppPaths paths)
+    public TrayApplication(CaptureCoordinator coordinator, AppPaths paths, FileImageStore images)
     {
         _coordinator = coordinator;
         _paths = paths;
+        _images = images;
         _marshal.CreateControl(); // gives the UI thread a handle to marshal onto
 
         _icons = new Dictionary<CaptureState, Icon>
@@ -48,7 +51,8 @@ public sealed class TrayApplication : ApplicationContext
         menu.Items.Add("Pause until resumed", null, (_, _) => _coordinator.Pause(null));
         menu.Items.Add(_resumeItem);
         menu.Items.Add(new ToolStripSeparator());
-        menu.Items.Add("Open captures folder", null, (_, _) => Open(EnsureFolder(_paths.CapturesFolder)));
+        // The screenshots are encrypted, so the folder itself is no use to look at: export a day instead.
+        menu.Items.Add("Export day…", null, (_, _) => ExportDay());
         menu.Items.Add("Open config file", null, (_, _) => Open(_paths.ConfigFile));
         menu.Items.Add(_autostartItem);
         menu.Items.Add(new ToolStripSeparator());
@@ -120,10 +124,53 @@ public sealed class TrayApplication : ApplicationContext
         }
     }
 
-    private static string EnsureFolder(string path)
+    /// <summary>Asks for a day and a folder, then writes that day's screenshots there, decrypted.</summary>
+    private void ExportDay()
     {
-        Directory.CreateDirectory(path);
-        return path;
+        try
+        {
+            IReadOnlyList<DateOnly> days = _images.Days();
+            if (days.Count == 0)
+            {
+                MessageBox.Show("There are no stored screenshots yet.", "TimeCapture", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+
+            using var picker = new ExportDayDialog(days);
+            if (picker.ShowDialog() != DialogResult.OK || picker.SelectedDay is not DateOnly day)
+            {
+                return;
+            }
+
+            using var folderDialog = new FolderBrowserDialog
+            {
+                Description = $"Folder for the screenshots of {day:yyyy-MM-dd}. They are written there unencrypted.",
+                UseDescriptionForTitle = true,
+                ShowNewFolderButton = true,
+            };
+            if (folderDialog.ShowDialog() != DialogResult.OK)
+            {
+                return;
+            }
+
+            string target = Path.Combine(folderDialog.SelectedPath, $"TimeCapture {day:yyyy-MM-dd}");
+            (int exported, int failed) = _images.ExportDay(day, target);
+            Log.Information("Exported a day: {Exported} images, {Failed} failed", exported, failed);
+            if (failed > 0)
+            {
+                MessageBox.Show($"{failed} screenshot(s) could not be decrypted (key missing or file changed).",
+                    "TimeCapture", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            }
+            if (exported > 0)
+            {
+                Open(target);
+            }
+        }
+        catch (Exception ex)
+        {
+            Log.Error("Export failed: {ErrorType} 0x{HResult:X8}", ex.GetType().Name, ex.HResult);
+            MessageBox.Show("The export failed. See the log for details.", "TimeCapture", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+        }
     }
 
     private static void Open(string path)

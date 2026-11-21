@@ -3,8 +3,9 @@ using System.Globalization;
 namespace Capture.Storage;
 
 /// <summary>
-/// Deletes screenshot files older than the retention period. Whole day folders are removed, and
-/// the database rows stay with their file path set to null. Recognized text has a retention
+/// Deletes screenshot files older than the retention period. Whole day folders are removed, the
+/// database rows stay with their file path set to null, and the days' encryption keys are deleted,
+/// so encrypted images are unrecoverable even where the disk still holds their old sectors. Recognized text has a retention
 /// period of its own. Window titles and events are kept.
 /// </summary>
 public sealed class RetentionCleaner(string root, CaptureDatabase database, int retentionDays, int textRetentionDays)
@@ -32,6 +33,7 @@ public sealed class RetentionCleaner(string root, CaptureDatabase database, int 
         }
 
         database.ClearFilePathsBefore(firstDayToKeep);
+        database.DeleteDayKeysBefore(firstDayToKeep);
 
         DateOnly firstTextDayToKeep = today.AddDays(-Math.Max(0, textRetentionDays));
         database.DeleteTextBefore(new DateTimeOffset(firstTextDayToKeep.ToDateTime(TimeOnly.MinValue, DateTimeKind.Local)));

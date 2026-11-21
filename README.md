@@ -40,8 +40,32 @@ Some things are never recorded, whatever the rules say:
   before anything of it is saved; such text is blacked out in the screenshot and replaced in the
   stored text. If the text cannot be read, nothing of the window's content is kept (`redactSecrets`).
 
-Screenshots are stored as lossless PNG files at full size and deleted after `retentionDays` days, recognized text after
-`textRetentionDays` days. Window titles and events are kept.
+Screenshots are stored as lossless PNG files at full size, encrypted (`encryptImages`), and deleted
+after `retentionDays` days, recognized text after `textRetentionDays` days. Window titles and events
+are kept.
+
+### Protection on disk
+
+- **Folder permissions.** On start, the storage root is restricted to your Windows account and
+  SYSTEM, without inherited permissions, as long as it holds only this app's files. It is also
+  excluded from Windows Search indexing.
+- **Synced folders.** If the storage root lies in a OneDrive, Dropbox, Google Drive or iCloud folder,
+  the app warns in its log and console. Move it out: the database is not encrypted.
+- **Encrypted screenshots** (`encryptImages`). Every screenshot is encrypted in memory with AES-256-GCM
+  before it is written, as `.png.enc`; no unencrypted image touches the disk. Each day has its own
+  random key, stored in `capture.db` wrapped with Windows DPAPI, so only your Windows login can unwrap
+  it. Retention deletes the keys of expired days, which makes their images unrecoverable even where
+  the disk still holds the old data. To look at screenshots, use **Export day…** in the tray menu:
+  it decrypts one day into a folder you choose (delete it when you are done).
+
+What encryption protects against: other accounts on the machine, the disk read offline (stolen
+laptop, old drive), backups and sync tools that copy the files, and the Explorer thumbnail cache.
+What it does not protect against: malware running under your account, which can ask DPAPI for the
+keys just like the app does. The data is tied to your Windows profile: after a reinstall, or if an
+administrator resets your password, the encrypted screenshots can no longer be read. A separate
+recovery key would be a possible addition later. Screenshots from earlier versions (`.avif`, `.png`)
+are not encrypted and stay readable. Turning `encryptImages` off stores new screenshots unencrypted;
+encrypted ones stay readable.
 
 ## Build and run
 
@@ -101,6 +125,7 @@ never captured and do not hide the windows below them.
 | `storeText` | true | Store the recognized text of captured windows (layer 2). Needs `redactSecrets`. |
 | `textRetentionDays` | 30 | Recognized text older than this is deleted. |
 | `storeImages` | true | Keep the screenshots (layer 3). Off keeps titles and recognized text only. |
+| `encryptImages` | true | Encrypt the screenshots on disk, see [Protection on disk](#protection-on-disk). |
 | `maxImageDimension` | 0 | Screenshots are scaled down so the longer side has at most this many pixels. 0 keeps the original size, which keeps small text readable. |
 | `dedupeThreshold` | 4 | How similar a screenshot must be to the previous one to count as a duplicate. Higher values treat more screenshots as duplicates. |
 | `redactSecrets` | true | Black out text that looks like a secret, as described above. |
@@ -111,9 +136,9 @@ never captured and do not hide the windows below them.
 
 Inside the storage root:
 
-- `capture.db`: a SQLite database with the activity events, one entry per captured window and the
-  recognized text.
-- `captures\`: the screenshots, one folder per day.
+- `capture.db`: a SQLite database with the activity events, one entry per captured window, the
+  recognized text and the wrapped day keys of the screenshots.
+- `captures\`: the screenshots, one folder per day, encrypted (`.png.enc`).
 - `logs\`: the application's log files. They contain no window titles and no screen content.
 
 ## Repository layout

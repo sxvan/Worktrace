@@ -7,6 +7,7 @@
   <ItemGroup>
     <Using Include="Xunit" />
     <ProjectReference Include="..\..\src\Capture.Core\Capture.Core.csproj" />
+    <ProjectReference Include="..\..\src\Capture.Storage\Capture.Storage.csproj" />
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="xunit.v3" Version="4.0.3" />

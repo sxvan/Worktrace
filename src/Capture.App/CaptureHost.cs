@@ -1,4 +1,4 @@
-using System.Threading.Channels;
+﻿using System.Threading.Channels;
 using System.Windows.Forms;
 using Capture.Core.Config;
 using Capture.Core.Monitoring;
@@ -54,6 +54,12 @@ internal static class CaptureHost
     private static int RunTray(AppPaths paths, CaptureConfig config)
     {
         Log.Information("Starting. Storage root: {Root}. Rules: {RuleCount}", paths.Root, config.Rules.Count);
+        foreach (string warning in paths.Warnings)
+        {
+            // Paths only, no screen content.
+            Log.Warning("Storage: {Warning}", warning);
+            Console.WriteLine("Warning: " + warning);
+        }
         if (config.Rules.Count == 0)
         {
             Log.Warning("config.json has no rules; nothing will be recorded");
@@ -99,9 +105,18 @@ internal static class CaptureHost
 
         using Timer retentionTimer = StartRetention(paths, database, config.RetentionDays, config.TextRetentionDays);
 
+        // The keys are always available for reading; encryptImages decides whether new images are encrypted.
+        var imageStore = new FileImageStore(
+            paths.Root, config.MaxImageDimension, new DayKeyStore(database, new DpapiKeyProtector()), config.EncryptImages);
+        if (!config.EncryptImages)
+        {
+            Log.Warning("Image encryption is switched off in the config");
+            Console.WriteLine("Note: encryptImages is false; screenshots are stored unencrypted.");
+        }
+
         using var pipeline = new CapturePipeline(
             redactor,
-            new FileImageStore(paths.Root, config.MaxImageDimension),
+            imageStore,
             database,
             config.DedupeThreshold,
             config.StoreImages,
@@ -129,7 +144,7 @@ internal static class CaptureHost
         }, TaskContinuationOptions.OnlyOnFaulted);
 
         Application.EnableVisualStyles();
-        using (var tray = new TrayApplication(coordinator, paths))
+        using (var tray = new TrayApplication(coordinator, paths, imageStore))
         {
             Application.Run(tray);
         }
