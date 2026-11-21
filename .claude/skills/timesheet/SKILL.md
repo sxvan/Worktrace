@@ -44,13 +44,9 @@ description: Build timesheet entries for a day from TimeCapture's recording and 
 
 4. **Build the entries** (defaults the user has used, unless they say otherwise):
    - A visit lasts until the next event; idle, lock, sleep and pause end it.
-   - In this order: first assign every visit and session span to a project, then join the
-     pieces of each project into blocks, bridging gaps of at most 10 minutes (never across idle
-     or lock periods; longer gaps split the block), and only then round each block's start and
-     end to the nearest 15 minutes. Never round single visits.
-   - A block that rounds to zero is not dropped: it stays in the table with Dauer "0:00 (rundet
-     auf 0)" and its measured times in the text, and counts in no total. The user decides
-     whether to book it.
+   - First group the visits and session spans by project into blocks, bridging gaps of at most
+     10 minutes (never across idle or lock). Then round each block's start and end to the
+     nearest 15 minutes; a block is at least 15 minutes long.
    - Report every block of the day in one table, in time order, including games, video, private
      browsing and tool setup. Columns: project, start, end, duration, focused minutes, source
      (visits, sessions, screenshot), and the entry text.
