@@ -101,7 +101,7 @@ internal static class CaptureHost
 
         using var pipeline = new CapturePipeline(
             redactor,
-            new FileImageStore(paths.Root, config.ImageQuality, Math.Clamp(config.ImageEncoderSpeed, 0, 9), config.MaxImageDimension),
+            new FileImageStore(paths.Root, config.MaxImageDimension),
             database,
             config.DedupeThreshold,
             config.StoreImages,

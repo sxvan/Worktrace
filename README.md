@@ -40,7 +40,7 @@ Some things are never recorded, whatever the rules say:
   before anything of it is saved; such text is blacked out in the screenshot and replaced in the
   stored text. If the text cannot be read, nothing of the window's content is kept (`redactSecrets`).
 
-Screenshots are stored as AVIF files and deleted after `retentionDays` days, recognized text after
+Screenshots are stored as lossless PNG files at full size and deleted after `retentionDays` days, recognized text after
 `textRetentionDays` days. Window titles and events are kept.
 
 ## Build and run
@@ -101,9 +101,7 @@ never captured and do not hide the windows below them.
 | `storeText` | true | Store the recognized text of captured windows (layer 2). Needs `redactSecrets`. |
 | `textRetentionDays` | 30 | Recognized text older than this is deleted. |
 | `storeImages` | true | Keep the screenshots (layer 3). Off keeps titles and recognized text only. |
-| `imageQuality` | 40 | AVIF quality of the screenshots. |
-| `maxImageDimension` | 1920 | Screenshots are scaled down so the longer side has at most this many pixels. 0 keeps the original size. |
-| `imageEncoderSpeed` | 8 | AVIF encoder effort: 0 gives the smallest files, 9 is the fastest. |
+| `maxImageDimension` | 0 | Screenshots are scaled down so the longer side has at most this many pixels. 0 keeps the original size, which keeps small text readable. |
 | `dedupeThreshold` | 4 | How similar a screenshot must be to the previous one to count as a duplicate. Higher values treat more screenshots as duplicates. |
 | `redactSecrets` | true | Black out text that looks like a secret, as described above. |
 | `stripUrlQueries` | false | Cut query strings and fragments off URLs in stored titles and text, also where the secret check sees nothing. |
