@@ -44,9 +44,13 @@ description: Build timesheet entries for a day from TimeCapture's recording and 
 
 4. **Build the entries** (defaults the user has used, unless they say otherwise):
    - A visit lasts until the next event; idle, lock, sleep and pause end it.
-   - Bridge gaps between visits to the same project of at most 10 minutes; never bridge idle or
-     lock periods. Longer gaps split the block.
-   - Round each block's start and end to the nearest 15 minutes; drop blocks that round to zero.
+   - In this order: first assign every visit and session span to a project, then join the
+     pieces of each project into blocks, bridging gaps of at most 10 minutes (never across idle
+     or lock periods; longer gaps split the block), and only then round each block's start and
+     end to the nearest 15 minutes. Never round single visits.
+   - A block that rounds to zero is not dropped: it stays in the table with Dauer "0:00 (rundet
+     auf 0)" and its measured times in the text, and counts in no total. The user decides
+     whether to book it.
    - Report every block of the day in one table, in time order, including games, video, private
      browsing and tool setup. Columns: project, start, end, duration, focused minutes, source
      (visits, sessions, screenshot), and the entry text.
@@ -56,8 +60,9 @@ description: Build timesheet entries for a day from TimeCapture's recording and 
      the raw visits): "Total Arbeit" (all unmarked blocks; where blocks overlap, count the time
      once, as you would book it) and "Total evtl. nicht Arbeit" (the marked blocks), each with
      its duration in the Dauer column.
-   - Overlapping blocks (parallel sessions in two projects) are reported as they are, marked as
-     overlapping; say which one you would book.
+   - Overlapping blocks (parallel sessions in two projects) are reported as they are. Mark each
+     of them in the project column with "↔ überschneidet <other project>" (no other symbols, no
+     legend needed), and say below the table which one you would book.
    - The entry text is in Swiss Standard German (de-CH: "ss", never "ß"), short and concrete,
      what was done, not how: a few words to one short sentence, no filler. For example:
      "CI-Gate für PRs eingerichtet, release-please aufgesetzt" or "Glove: Umbenennung geprüft".
