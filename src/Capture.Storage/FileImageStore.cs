@@ -16,10 +16,13 @@ namespace Capture.Storage;
 ///
 /// With a <see cref="DayKeyStore"/>, every image is encrypted in memory before it is written
 /// (see <see cref="ImageCipher"/>) and gets the extension .png.enc: no plaintext image ever
-/// touches the disk, not even as a temporary file. <see cref="Read"/> decrypts again.
+/// touches the disk, not even as a temporary file. <see cref="Read"/> decrypts again; it also
+/// reads encrypted images when <paramref name="encrypt"/> is off, as long as the keys are there.
 /// </summary>
-public sealed class FileImageStore(string root, int maxDimension, DayKeyStore? keys = null) : IImageStore
+public sealed class FileImageStore(string root, int maxDimension, DayKeyStore? keys = null, bool encrypt = true) : IImageStore
 {
+    private readonly bool _encrypt = keys is not null && encrypt;
+
     public const string CapturesFolderName = "captures";
     public const string DayFolderFormat = "yyyy-MM-dd";
     public const string EncryptedExtension = ".enc";
@@ -32,7 +35,7 @@ public sealed class FileImageStore(string root, int maxDimension, DayKeyStore? k
             CapturesFolderName,
             local.ToString(DayFolderFormat, CultureInfo.InvariantCulture),
             $"{local.ToString("HHmmss_fff", CultureInfo.InvariantCulture)}_w{sequence}_{process}.png"
-            + (keys is null ? "" : EncryptedExtension));
+            + (_encrypt ? EncryptedExtension : ""));
 
         byte[] encoded = Encode(image, out int width, out int height);
         Write(relativePath, DateOnly.FromDateTime(local), encoded);
@@ -46,9 +49,9 @@ public sealed class FileImageStore(string root, int maxDimension, DayKeyStore? k
         Directory.CreateDirectory(Path.GetDirectoryName(fullPath)!);
 
         byte[] data = encoded;
-        if (keys is not null)
+        if (_encrypt)
         {
-            data = ImageCipher.Encrypt(keys.GetOrCreate(day), encoded, relativePath);
+            data = ImageCipher.Encrypt(keys!.GetOrCreate(day), encoded, relativePath);
             Array.Clear(encoded);
         }
 
@@ -72,7 +75,7 @@ public sealed class FileImageStore(string root, int maxDimension, DayKeyStore? k
         }
         if (keys is null)
         {
-            throw new CryptographicException("Image encryption is switched off, so encrypted images cannot be read.");
+            throw new CryptographicException("No day keys available, so encrypted images cannot be read.");
         }
         DateOnly day = DayOf(relativePath)
                        ?? throw new CryptographicException("The image is not in a day folder, so its key is unknown.");
