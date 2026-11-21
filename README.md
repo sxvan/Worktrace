@@ -147,7 +147,7 @@ Inside the storage root:
 | Path | Content |
 |---|---|
 | `src/Capture.Core` | Rules, capture triggers, redaction and image handling, independent of Windows |
-| `src/Capture.Windows` | Window inspection, screen capture, text recognition, password field detection |
+| `src/Capture.Windows` | Window inspection, screen capture, password field detection |
 | `src/Capture.Storage` | SQLite database, image files, retention |
 | `src/Capture.App` | The tray application |
 | `tests/Capture.Core.Tests` | Unit tests |
