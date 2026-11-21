@@ -20,3 +20,16 @@ public interface ISecretDetector
     /// <summary>Returns the image regions to black out.</summary>
     IReadOnlyList<RectInt> FindSecrets(IReadOnlyList<RecognizedLine> lines);
 }
+
+/// <summary>One line of text as a recognizer returns it: the text and its box in the image.</summary>
+public sealed record OcrLine(string Text, RectInt Bounds, float Confidence);
+
+/// <summary>
+/// Reads the text in an image. Runs only on demand, on an image taken out of storage, never at
+/// capture time; its result is redacted before anything else sees it (<see cref="ScreenTextRedactor"/>).
+/// </summary>
+public interface ITextRecognizer
+{
+    /// <param name="image">An encoded image (PNG).</param>
+    IReadOnlyList<OcrLine> Recognize(byte[] image);
+}
