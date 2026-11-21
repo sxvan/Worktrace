@@ -1,4 +1,4 @@
-using System.Threading.Channels;
+﻿using System.Threading.Channels;
 using System.Windows.Forms;
 using Capture.Core.Config;
 using Capture.Core.Monitoring;
@@ -54,6 +54,12 @@ internal static class CaptureHost
     private static int RunTray(AppPaths paths, CaptureConfig config)
     {
         Log.Information("Starting. Storage root: {Root}. Rules: {RuleCount}", paths.Root, config.Rules.Count);
+        foreach (string warning in paths.Warnings)
+        {
+            // Paths only, no screen content.
+            Log.Warning("Storage: {Warning}", warning);
+            Console.WriteLine("Warning: " + warning);
+        }
         if (config.Rules.Count == 0)
         {
             Log.Warning("config.json has no rules; nothing will be recorded");
