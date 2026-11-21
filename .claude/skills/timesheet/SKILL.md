@@ -26,7 +26,12 @@ description: Build timesheet entries for a day from TimeCapture's recording and 
    drop the rest: every activity of the day goes into the report (step 4). The user decides.
 
 3. **Ask for a screenshot only when that data cannot settle it**, for example a browser title that
-   names no project, or a long stretch in one generic window. Take an id from `shots`, or a time:
+   names no project, or a long stretch in one generic window. A window whose title names no project
+   (an unsaved editor tab, a generic browser tab) and that no session prompt names explicitly is not
+   settled: do not assign it from the surrounding work. Ask for a screenshot once its visits add up
+   to about 2 minutes or more (for example several short returns to the same tab). Below that, leave
+   it in the surrounding block and say in the reply that it is unassigned. Take an id from `shots`,
+   or a time:
 
    ```
    timecapture-cli screenshot <id>
