@@ -15,6 +15,9 @@ public static class DayExport
     /// <summary>At most this many screenshot ids are listed per visit, spread over its length.</summary>
     public const int MaxScreenshotsPerVisit = 6;
 
+    /// <summary>Window visits shorter than this are folded into their neighbours (see <see cref="VisitBuilder.DropShortSwitches"/>).</summary>
+    public static readonly TimeSpan MinimumSwitch = TimeSpan.FromSeconds(3);
+
     public static string ToText(DateOnly day, IReadOnlyList<Visit> visits, IReadOnlyList<ScreenshotRef> screenshots, TimeZoneInfo zone)
     {
         var text = new StringBuilder();
@@ -23,6 +26,7 @@ public static class DayExport
         text.Append(Heading("TimeCapture export", day, zone));
         text.Append("## Visits\n");
         text.Append("Focused window or break; each lasts until the next. Titles are scrubbed of secrets.\n");
+        text.Append("Window switches under 3 s (alt-tab, flashing dialogs) are counted to the visit before.\n");
         text.Append("`shots` are screenshot ids of the focused window during the visit (`screenshot <id>`).\n\n");
         if (visits.Count == 0)
         {

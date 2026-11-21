@@ -47,8 +47,9 @@ public sealed class ScreenTextRedactor(TextScrubber scrubber)
     }
 
     /// <summary>
-    /// Groups pieces into rows: a piece joins a row when their vertical extents overlap by at least
-    /// half the smaller height. Rows top to bottom, pieces in a row left to right.
+    /// Groups pieces into lines: a piece joins a row when their vertical extents overlap by at least
+    /// half the smaller height, and a row is split where a wide gap separates two columns. Lines
+    /// top to bottom, and left to right within a row; pieces in a line left to right.
     /// </summary>
     internal static IReadOnlyList<IReadOnlyList<OcrLine>> Rows(IReadOnlyList<OcrLine> pieces)
     {
@@ -71,11 +72,31 @@ public sealed class ScreenTextRedactor(TextScrubber scrubber)
                 rows[index] = (Math.Min(top, piece.Bounds.Top), Math.Max(bottom, piece.Bounds.Bottom), list);
             }
         }
-        return rows
-            .OrderBy(r => r.Top + r.Bottom)
-            .Select(r => (IReadOnlyList<OcrLine>)r.Pieces.OrderBy(p => p.Bounds.Left).ToList())
-            .ToList();
+        var lines = new List<IReadOnlyList<OcrLine>>();
+        foreach (var row in rows.OrderBy(r => r.Top + r.Bottom))
+        {
+            // Pieces side by side in different columns (a sidebar and the main text) share a row
+            // but not a line: a wide gap starts a new one.
+            List<OcrLine> line = [];
+            foreach (OcrLine piece in row.Pieces.OrderBy(p => p.Bounds.Left))
+            {
+                if (line.Count > 0 && piece.Bounds.Left - line[^1].Bounds.Right > ColumnGap(line[^1], piece))
+                {
+                    lines.Add(line);
+                    line = [];
+                }
+                line.Add(piece);
+            }
+            lines.Add(line);
+        }
+        return lines;
     }
+
+    /// <summary>A horizontal gap wider than this many line heights separates two columns.</summary>
+    internal const int ColumnGapInLineHeights = 4;
+
+    private static int ColumnGap(OcrLine left, OcrLine right) =>
+        ColumnGapInLineHeights * Math.Max(left.Bounds.Height, right.Bounds.Height);
 
     /// <summary>The words of a piece, with boxes spread over it in proportion to their characters.</summary>
     internal static IReadOnlyList<RecognizedWord> Words(OcrLine line)

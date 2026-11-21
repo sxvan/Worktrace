@@ -71,6 +71,22 @@ public class ScreenTextRedactorTests
     }
 
     [Fact]
+    public void Columns_on_the_same_row_become_separate_lines()
+    {
+        // A sidebar entry at the left, the main text far to the right, both 20 pixels high.
+        OcrLine[] pieces =
+        [
+            new("main text", new RectInt(1000, 0, 1200, 20), 1f),
+            new("sidebar", new RectInt(10, 2, 150, 22), 1f),
+            new("continues", new RectInt(1230, 0, 1400, 20), 1f),
+        ];
+
+        var result = Redactor.Redact(pieces);
+
+        Assert.Equal(["sidebar", "main text continues"], result.Lines.Select(l => l.Text));
+    }
+
+    [Fact]
     public void A_password_split_from_its_name_is_still_hidden()
     {
         // The recognizer returned "password:" and the value as two pieces.

@@ -59,6 +59,44 @@ public class VisitBuilderTests
         Assert.Single(visits);
     }
 
+    private static Visit V(int fromSeconds, int toSeconds, VisitKind kind, string? process = null) =>
+        new(T0.AddSeconds(fromSeconds), T0.AddSeconds(toSeconds), kind, process, process);
+
+    [Fact]
+    public void Short_switches_go_to_the_visit_before_and_equal_neighbours_merge()
+    {
+        Visit[] visits =
+        [
+            V(0, 30, VisitKind.Window, "game"),
+            V(30, 30, VisitKind.Other),
+            V(30, 31, VisitKind.Window, "explorer"),
+            V(31, 90, VisitKind.Window, "game"),
+        ];
+
+        Visit visit = Assert.Single(VisitBuilder.DropShortSwitches(visits, TimeSpan.FromSeconds(3)));
+
+        Assert.Equal((T0, T0.AddSeconds(90), "game"), (visit.Start, visit.End, visit.ProcessName));
+    }
+
+    [Fact]
+    public void A_short_switch_at_the_start_goes_to_the_visit_after()
+    {
+        Visit[] visits = [V(0, 1, VisitKind.Other), V(1, 60, VisitKind.Window, "code")];
+
+        Visit visit = Assert.Single(VisitBuilder.DropShortSwitches(visits, TimeSpan.FromSeconds(3)));
+
+        Assert.Equal(T0, visit.Start);
+    }
+
+    [Fact]
+    public void Short_breaks_are_kept()
+    {
+        Visit[] visits = [V(0, 30, VisitKind.Window, "code"), V(30, 31, VisitKind.Locked), V(31, 60, VisitKind.Window, "code")];
+
+        Assert.Equal([VisitKind.Window, VisitKind.Locked, VisitKind.Window],
+            VisitBuilder.DropShortSwitches(visits, TimeSpan.FromSeconds(3)).Select(v => v.Kind));
+    }
+
     [Fact]
     public void Visits_stop_at_the_end_of_the_data()
     {

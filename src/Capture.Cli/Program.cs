@@ -109,7 +109,8 @@ internal static class Program
             dataEnd = reader.LastRecordBefore(to) is { } last ? last + DataEndGrace : from;
         }
 
-        IReadOnlyList<Visit> visits = VisitBuilder.Build(reader.ReadEvents(from, to), from, to, dataEnd);
+        IReadOnlyList<Visit> visits = VisitBuilder.DropShortSwitches(
+            VisitBuilder.Build(reader.ReadEvents(from, to), from, to, dataEnd), DayExport.MinimumSwitch);
         IReadOnlyList<ScreenshotRef> screenshots = reader.ReadFocusedScreenshots(from, to);
 
         Console.Write(DayExport.ToText(day, visits, screenshots, TimeZoneInfo.Local));

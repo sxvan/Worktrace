@@ -67,6 +67,48 @@ public static class VisitBuilder
         return visits;
     }
 
+    /// <summary>
+    /// Removes window visits shorter than <paramref name="minimum"/> (passing through windows
+    /// while alt-tabbing, a dialog that flashes up): their time goes to the visit before, or to the
+    /// one after if they come first, and neighbours that are then equal are merged. Breaks (idle,
+    /// locked, asleep, paused) are always kept, however short.
+    /// </summary>
+    public static IReadOnlyList<Visit> DropShortSwitches(IReadOnlyList<Visit> visits, TimeSpan minimum)
+    {
+        var kept = new List<Visit>(visits.Count);
+        DateTimeOffset? pendingStart = null;
+        foreach (Visit visit in visits)
+        {
+            bool isWindow = visit.Kind is VisitKind.Window or VisitKind.Other;
+            if (isWindow && visit.Duration < minimum)
+            {
+                if (kept.Count > 0 && kept[^1].End == visit.Start)
+                {
+                    kept[^1] = kept[^1] with { End = visit.End };
+                }
+                else
+                {
+                    pendingStart ??= visit.Start;
+                }
+                continue;
+            }
+
+            Visit current = pendingStart is { } start && start < visit.Start ? visit with { Start = start } : visit;
+            pendingStart = null;
+
+            if (kept.Count > 0 && kept[^1] is var previous && previous.End == current.Start && previous.Kind == current.Kind
+                && previous.ProcessName == current.ProcessName && previous.WindowTitle == current.WindowTitle)
+            {
+                kept[^1] = previous with { End = current.End };
+            }
+            else
+            {
+                kept.Add(current);
+            }
+        }
+        return kept;
+    }
+
     private static void Emit(List<Visit> visits, State state, DateTimeOffset start, DateTimeOffset end)
     {
         if (end <= start || state.Current() is not { } current)
