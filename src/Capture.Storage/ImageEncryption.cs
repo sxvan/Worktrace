@@ -66,7 +66,7 @@ public sealed class DpapiKeyProtector : IKeyProtector
 {
     // Ties the blobs to this app: another program calling DPAPI for the same user cannot unwrap
     // them without knowing this value too.
-    private static readonly byte[] Entropy = "OpenTimesheet.TimeCapture.DayKey.v1"u8.ToArray();
+    private static readonly byte[] Entropy = "Worktrace.TimeCapture.DayKey.v1"u8.ToArray();
 
     public byte[] Protect(byte[] key) => ProtectedData.Protect(key, Entropy, DataProtectionScope.CurrentUser);
 
