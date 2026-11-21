@@ -8,8 +8,8 @@ public class DayExportTests
     private static readonly DateTimeOffset T0 = new(2026, 11, 20, 9, 0, 0, TimeSpan.Zero);
     private static DateTimeOffset At(int minutes) => T0.AddMinutes(minutes);
 
-    private static string Export(IReadOnlyList<Visit> visits, IReadOnlyList<ScreenshotRef> shots, IReadOnlyList<AgentSession>? sessions = null) =>
-        DayExport.ToText(Day, visits, shots, sessions ?? [], TimeZoneInfo.Utc);
+    private static string Export(IReadOnlyList<Visit> visits, IReadOnlyList<ScreenshotRef> shots) =>
+        DayExport.ToText(Day, visits, shots, TimeZoneInfo.Utc);
 
     [Fact]
     public void Screenshots_are_listed_with_the_visit_of_their_window()
@@ -52,15 +52,22 @@ public class DayExportTests
     }
 
     [Fact]
-    public void Sessions_show_folder_branch_spans_and_prompts()
+    public void The_day_export_has_no_sessions()
+    {
+        Assert.DoesNotContain("Claude Code", Export([], []));
+    }
+
+    [Fact]
+    public void Sessions_show_folder_branch_spans_prompts_and_transcript()
     {
         AgentSession session = new("s1", @"C:\repo", ["feat/x"],
             [new ActiveSpan(At(0), At(30)), new ActiveSpan(At(60), At(70))],
             [new AgentPrompt(At(1), "add the export")]);
 
-        string text = Export([], [], [session]);
+        string text = SessionsExport.ToText(Day, [session with { TranscriptPath = @"C:\t\s1.jsonl" }], TimeZoneInfo.Utc);
 
-        Assert.Contains("### C:\\repo [feat/x]", text);
+        Assert.Contains("## C:\\repo [feat/x]", text);
+        Assert.Contains(@"transcript: C:\t\s1.jsonl", text);
         Assert.Contains("active: 09:00-09:30, 10:00-10:10", text);
         Assert.Contains("- 09:01 add the export", text);
     }

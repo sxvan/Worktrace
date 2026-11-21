@@ -1,10 +1,15 @@
-// timecapture-cli: hands what TimeCapture recorded to a model (Claude Code), in two steps.
+// timecapture-cli: hands what TimeCapture recorded, and the day's Claude Code sessions, to a
+// model (Claude Code).
 //
-//   timecapture-cli export [--day yyyy-MM-dd] [--root DIR] [--transcripts DIR | --no-transcripts]
+//   timecapture-cli export [--day yyyy-MM-dd] [--root DIR]
+//   timecapture-cli sessions [--day yyyy-MM-dd] [--transcripts DIR]
 //   timecapture-cli screenshot <id> | --at "yyyy-MM-dd HH:mm[:ss]" [--out DIR] [--root DIR]
 //
-// export prints the day: visits with (scrubbed) window titles, the ids of the screenshots taken
-// during each, and the day's Claude Code sessions. It contains no screen content.
+// export prints what TimeCapture recorded for the day: visits with (scrubbed) window titles and
+// the ids of the screenshots taken during each. It contains no screen content.
+//
+// sessions summarizes the day's Claude Code transcripts (active times, folder, branch, prompts)
+// and names each transcript file, for reading one session in full when the summary is not enough.
 //
 // screenshot decrypts one screenshot in memory, recognizes its text with PaddleOCR, applies the
 // redaction rules to text and image, and shows the result to the user. Only when the user clicks
@@ -28,11 +33,14 @@ internal static class Program
 {
     private const string Usage = """
         Usage:
-          timecapture-cli export [--day yyyy-MM-dd] [--root DIR] [--transcripts DIR | --no-transcripts]
+          timecapture-cli export [--day yyyy-MM-dd] [--root DIR]
+          timecapture-cli sessions [--day yyyy-MM-dd] [--transcripts DIR]
           timecapture-cli screenshot <id> | --at "yyyy-MM-dd HH:mm[:ss]" [--out DIR] [--root DIR]
 
-        export      The day's visits (window titles, scrubbed), screenshot ids per visit, and the
-                    Claude Code sessions of the day. No screen content. Default: today.
+        export      What TimeCapture recorded for the day: visits (window titles, scrubbed) and
+                    screenshot ids per visit. No screen content. Default: today.
+        sessions    The day's Claude Code sessions: active times, folder, branch, prompts typed,
+                    and the transcript file of each. Default: today.
         screenshot  Recognizes the text of one screenshot, redacts text and image, and asks the
                     user in a window whether to share them. Only if the user agrees, writes the
                     redacted image (default folder %TEMP%\timecapture-shared) and prints its path
@@ -68,6 +76,7 @@ internal static class Program
             return args[0] switch
             {
                 "export" => Export(options),
+                "sessions" => Sessions(options),
                 "screenshot" => Screenshot(options),
                 _ => Fail($"Unknown command \"{args[0]}\".\n\n{Usage}"),
             };
@@ -84,18 +93,11 @@ internal static class Program
 
     private static int Export(Options options)
     {
-        DateOnly day = options.Day();
-        DateTimeOffset from = Local(day.ToDateTime(TimeOnly.MinValue));
-        DateTimeOffset to = Local(day.AddDays(1).ToDateTime(TimeOnly.MinValue));
-        DateTimeOffset now = DateTimeOffset.Now;
-        if (from > now)
+        if (DayRange(options) is not var (day, from, to))
         {
             return Fail("That day lies in the future.");
         }
-        if (to > now)
-        {
-            to = now;
-        }
+        DateTimeOffset now = DateTimeOffset.Now;
 
         using var reader = new CaptureReader(DatabasePath(options));
 
@@ -109,10 +111,33 @@ internal static class Program
 
         IReadOnlyList<Visit> visits = VisitBuilder.Build(reader.ReadEvents(from, to), from, to, dataEnd);
         IReadOnlyList<ScreenshotRef> screenshots = reader.ReadFocusedScreenshots(from, to);
-        IReadOnlyList<AgentSession> sessions = options.Has("no-transcripts") ? [] : ReadSessions(TranscriptFolder(options), from, to);
 
-        Console.Write(DayExport.ToText(day, visits, screenshots, sessions, TimeZoneInfo.Local));
+        Console.Write(DayExport.ToText(day, visits, screenshots, TimeZoneInfo.Local));
         return 0;
+    }
+
+    private static int Sessions(Options options)
+    {
+        if (DayRange(options) is not var (day, from, to))
+        {
+            return Fail("That day lies in the future.");
+        }
+        Console.Write(SessionsExport.ToText(day, ReadSessions(TranscriptFolder(options), from, to), TimeZoneInfo.Local));
+        return 0;
+    }
+
+    /// <summary>The day of --day (default today) as a local time range, cut off at now; null for a day in the future.</summary>
+    private static (DateOnly Day, DateTimeOffset From, DateTimeOffset To)? DayRange(Options options)
+    {
+        DateOnly day = options.Day();
+        DateTimeOffset from = Local(day.ToDateTime(TimeOnly.MinValue));
+        DateTimeOffset to = Local(day.AddDays(1).ToDateTime(TimeOnly.MinValue));
+        DateTimeOffset now = DateTimeOffset.Now;
+        if (from > now)
+        {
+            return null;
+        }
+        return (day, from, to > now ? now : to);
     }
 
     private static int Screenshot(Options options)
@@ -240,7 +265,7 @@ internal static class Program
                         // Helper sessions some tools start in the temp folder (titles and the like) are not work.
                         && !(session.WorkingDirectory is { } cwd && Path.GetFullPath(cwd).StartsWith(temp, StringComparison.OrdinalIgnoreCase)))
                     {
-                        sessions.Add(session);
+                        sessions.Add(session with { TranscriptPath = Path.GetFullPath(file) });
                     }
                 }
                 catch (IOException)
@@ -311,9 +336,6 @@ internal static class Program
 
     private sealed class Options
     {
-        /// <summary>Options that take no value.</summary>
-        private static readonly HashSet<string> Flags = new(StringComparer.OrdinalIgnoreCase) { "no-transcripts" };
-
         private readonly Dictionary<string, string> _named = new(StringComparer.OrdinalIgnoreCase);
 
         public List<string> Positional { get; } = [];
@@ -327,11 +349,6 @@ internal static class Program
                 if (e.Current.StartsWith("--", StringComparison.Ordinal))
                 {
                     string name = e.Current[2..];
-                    if (Flags.Contains(name))
-                    {
-                        options._named[name] = "";
-                        continue;
-                    }
                     if (!e.MoveNext())
                     {
                         throw new ArgumentException($"--{name} needs a value.");
@@ -347,8 +364,6 @@ internal static class Program
         }
 
         public string? Get(string name) => _named.GetValueOrDefault(name);
-
-        public bool Has(string name) => _named.ContainsKey(name);
 
         public DateOnly Day() =>
             Get("day") is not { } day ? DateOnly.FromDateTime(DateTime.Now)

@@ -10,12 +10,14 @@ public sealed record AgentPrompt(DateTimeOffset Timestamp, string Text);
 public sealed record ActiveSpan(DateTimeOffset Start, DateTimeOffset End);
 
 /// <summary>What one Claude Code session did within the export range.</summary>
+/// <param name="TranscriptPath">The transcript file, so the model can read one session in full when the summary is not enough.</param>
 public sealed record AgentSession(
     string SessionId,
     string? WorkingDirectory,
     IReadOnlyList<string> GitBranches,
     IReadOnlyList<ActiveSpan> ActiveSpans,
-    IReadOnlyList<AgentPrompt> Prompts);
+    IReadOnlyList<AgentPrompt> Prompts,
+    string? TranscriptPath = null);
 
 /// <summary>
 /// Reads a Claude Code transcript (one JSON object per line) and keeps what helps a timesheet:

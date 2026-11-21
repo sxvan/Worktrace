@@ -137,19 +137,26 @@ never captured and do not hide the windows below them.
 
 ## Handing a day to Claude
 
-`timecapture-cli` gives Claude Code what it needs to work out a timesheet, in two steps. The first
-contains no screen content; the second passes through your hands one screenshot at a time.
+`timecapture-cli` gives Claude Code what it needs to work out a timesheet. `export` and `sessions`
+contain no screen content; `screenshot` passes through your hands one screenshot at a time.
 
 ```powershell
 timecapture-cli export [--day 2026-11-20]
+timecapture-cli sessions [--day 2026-11-20]
 timecapture-cli screenshot <id>
 timecapture-cli screenshot --at "2026-11-20 14:30"
 ```
 
-**`export`** prints one day: the visits (which window had focus, from when to when, with the window
-title as stored, that is, scrubbed), the ids of the screenshots taken during each visit, and the
-Claude Code sessions of that day (folder, branch, active times, and the prompts you typed, read from
-`%USERPROFILE%\.claude\projects`; `--no-transcripts` leaves them out).
+**`export`** prints what TimeCapture recorded for one day: the visits (which window had focus, from
+when to when, with the window title as stored, that is, scrubbed) and the ids of the screenshots
+taken during each visit.
+
+**`sessions`** summarizes the Claude Code sessions of that day from the transcripts in
+`%USERPROFILE%\.claude\projects` (`--transcripts` names another folder): folder, branch, active
+times, the prompts you typed, and each session's transcript file. The transcripts themselves are
+large, so Claude reads this summary first and opens a single transcript only when it needs more.
+It is a separate command because it is not TimeCapture's data, and the transcript format belongs to
+Claude Code.
 
 **`screenshot`** is how Claude asks for a screenshot when titles and transcripts are not enough. It
 takes an id from the export, or `--at` a time (the focused window captured closest to it, within five

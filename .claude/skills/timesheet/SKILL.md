@@ -13,13 +13,16 @@ description: Build timesheet entries for a day from TimeCapture's recording and 
 
 ## Steps
 
-1. **Read the day.** `timecapture-cli export --day yyyy-MM-dd` (default: today). It lists the
-   visits (focused window and title, or idle, locked, asleep, paused), the screenshot ids per visit
-   (`shots: <id>@HH:mm`), and the day's Claude Code sessions with folder, branch, active spans and
-   prompts. `git log` in the repos named there can add what was committed.
+1. **Read the day.**
+   - `timecapture-cli export --day yyyy-MM-dd` (default: today): the visits (focused window and
+     title, or idle, locked, asleep, paused) and the screenshot ids per visit (`shots: <id>@HH:mm`).
+   - `timecapture-cli sessions --day yyyy-MM-dd`: the day's Claude Code sessions with folder,
+     branch, active spans, prompts, and the transcript file of each.
+   - `git log` in the repos named there can add what was committed.
 
 2. **Assign the visits to projects** from window titles, session folders, branches and prompts.
-   Leave out what is clearly not work.
+   Leave out what is clearly not work. If a session's prompts do not say enough, read that one
+   session's transcript (the `transcript:` path), not all of them: they are large.
 
 3. **Ask for a screenshot only when that data cannot settle it**, for example a browser title that
    names no project, or a long stretch in one generic window. Take an id from `shots`, or a time:
