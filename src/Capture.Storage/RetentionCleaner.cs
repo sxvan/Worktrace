@@ -4,9 +4,10 @@ namespace Capture.Storage;
 
 /// <summary>
 /// Deletes screenshot files older than the retention period. Whole day folders are removed, and
-/// the database rows stay with their file path set to null.
+/// the database rows stay with their file path set to null. Recognized text has a retention
+/// period of its own. Window titles and events are kept.
 /// </summary>
-public sealed class RetentionCleaner(string root, CaptureDatabase database, int retentionDays)
+public sealed class RetentionCleaner(string root, CaptureDatabase database, int retentionDays, int textRetentionDays)
 {
     /// <summary>Returns the number of day folders removed.</summary>
     public int Run(DateOnly today)
@@ -31,6 +32,9 @@ public sealed class RetentionCleaner(string root, CaptureDatabase database, int 
         }
 
         database.ClearFilePathsBefore(firstDayToKeep);
+
+        DateOnly firstTextDayToKeep = today.AddDays(-Math.Max(0, textRetentionDays));
+        database.DeleteTextBefore(new DateTimeOffset(firstTextDayToKeep.ToDateTime(TimeOnly.MinValue, DateTimeKind.Local)));
         return removed;
     }
 }

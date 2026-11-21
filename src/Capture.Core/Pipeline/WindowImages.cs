@@ -1,4 +1,5 @@
 using Capture.Core.Capturing;
+using Capture.Core.Redaction;
 
 namespace Capture.Core.Pipeline;
 
@@ -51,9 +52,11 @@ public sealed class RedactedWindowImage : IDisposable
     private byte[]? _pixels;
 
     internal RedactedWindowImage(
-        DateTimeOffset timestamp, WindowPlacement placement, int width, int height, byte[] pixels, int redactionCount)
+        DateTimeOffset timestamp, WindowPlacement placement, int width, int height, byte[] pixels, int redactionCount,
+        IReadOnlyList<ScreenTextLine>? text = null)
     {
         RedactionCount = redactionCount;
+        Text = text;
         Timestamp = timestamp;
         Placement = placement;
         Width = width;
@@ -68,6 +71,12 @@ public sealed class RedactedWindowImage : IDisposable
 
     /// <summary>How many regions the redaction stage blacked out.</summary>
     public int RedactionCount { get; }
+
+    /// <summary>
+    /// The text recognized in the image, secrets replaced, or null if the redactor did not read
+    /// the text (redaction switched off).
+    /// </summary>
+    public IReadOnlyList<ScreenTextLine>? Text { get; }
 
     /// <summary>BGRA, rows top to bottom.</summary>
     public byte[] Pixels => _pixels ?? throw new ObjectDisposedException(nameof(RedactedWindowImage));

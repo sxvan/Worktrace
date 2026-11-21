@@ -2,6 +2,7 @@ using System.Globalization;
 using Capture.Core.Capturing;
 using Capture.Core.Geometry;
 using Capture.Core.Monitoring;
+using Capture.Core.Redaction;
 using Capture.Core.Triggers;
 using Microsoft.Data.Sqlite;
 
@@ -10,6 +11,7 @@ namespace Capture.Storage;
 /// <summary>One capturable window of a capture, as stored in capture_windows.</summary>
 /// <param name="FilePath">Relative path of the saved image, or null if it duplicates an earlier one.</param>
 /// <param name="DedupeReferenceId">capture_windows.id of the earlier image this one duplicates.</param>
+/// <param name="Text">Recognized text to store with the window, already scrubbed; null stores none.</param>
 public sealed record CapturedWindowRecord(
     WindowPlacement Placement,
     bool IsFocused,
@@ -18,11 +20,15 @@ public sealed record CapturedWindowRecord(
     ulong DHash,
     string? FilePath,
     long? DedupeReferenceId,
-    int RedactionCount = 0);
+    int RedactionCount = 0,
+    IReadOnlyList<ScreenTextLine>? Text = null);
 
 /// <summary>
 /// The SQLite database. WAL mode and short transactions, so a crash or kill cannot corrupt it.
 /// All members are safe to call from several threads.
+///
+/// Every window title passes through the title scrubber on its way in, so no title reaches the
+/// disk without the secret check.
 /// </summary>
 public sealed class CaptureDatabase : IDisposable
 {
@@ -30,9 +36,11 @@ public sealed class CaptureDatabase : IDisposable
 
     private readonly Lock _lock = new();
     private readonly SqliteConnection _connection;
+    private readonly TextScrubber _titleScrubber;
 
-    public CaptureDatabase(string path)
+    public CaptureDatabase(string path, TextScrubber titleScrubber)
     {
+        _titleScrubber = titleScrubber;
         Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(path))!);
 
         _connection = new SqliteConnection(new SqliteConnectionStringBuilder
@@ -106,7 +114,21 @@ public sealed class CaptureDatabase : IDisposable
             );
             CREATE INDEX IF NOT EXISTS ix_capture_windows_capture ON capture_windows(capture_id);
 
-            PRAGMA user_version=3;
+            -- Recognized text of a captured window, secrets replaced (layer 2). One row per text
+            -- segment; the box is relative to the window image, 0..1.
+            CREATE TABLE IF NOT EXISTS capture_text (
+                id                INTEGER PRIMARY KEY,
+                capture_window_id INTEGER NOT NULL REFERENCES capture_windows(id),
+                line_index        INTEGER NOT NULL,
+                text              TEXT NOT NULL,
+                left              REAL NOT NULL,
+                top               REAL NOT NULL,
+                right             REAL NOT NULL,
+                bottom            REAL NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS ix_capture_text_window ON capture_text(capture_window_id);
+
+            PRAGMA user_version=4;
             """);
     }
 
@@ -122,7 +144,7 @@ public sealed class CaptureDatabase : IDisposable
             command.Parameters.AddWithValue("$timestamp", Format(e.Timestamp));
             command.Parameters.AddWithValue("$type", e.Type.ToDbName());
             command.Parameters.AddWithValue("$process", (object?)e.ProcessName ?? DBNull.Value);
-            command.Parameters.AddWithValue("$title", (object?)e.WindowTitle ?? DBNull.Value);
+            command.Parameters.AddWithValue("$title", (object?)_titleScrubber.Scrub(e.WindowTitle) ?? DBNull.Value);
             command.Parameters.AddWithValue("$handle", (object?)e.WindowHandle ?? DBNull.Value);
             command.ExecuteNonQuery();
         }
@@ -178,7 +200,7 @@ public sealed class CaptureDatabase : IDisposable
                 command.Parameters.AddWithValue("$capture", captureId);
                 command.Parameters.AddWithValue("$handle", info.Handle);
                 command.Parameters.AddWithValue("$process", info.ProcessName ?? "");
-                command.Parameters.AddWithValue("$title", info.Title ?? "");
+                command.Parameters.AddWithValue("$title", _titleScrubber.Scrub(info.Title) ?? "");
                 command.Parameters.AddWithValue("$left", info.Bounds.Left);
                 command.Parameters.AddWithValue("$top", info.Bounds.Top);
                 command.Parameters.AddWithValue("$right", info.Bounds.Right);
@@ -197,7 +219,13 @@ public sealed class CaptureDatabase : IDisposable
                 command.Parameters.AddWithValue("$path", (object?)window.FilePath ?? DBNull.Value);
                 command.Parameters.AddWithValue("$ref", (object?)window.DedupeReferenceId ?? DBNull.Value);
                 command.Parameters.AddWithValue("$redactions", window.RedactionCount);
-                ids.Add((long)command.ExecuteScalar()!);
+                long windowId = (long)command.ExecuteScalar()!;
+                ids.Add(windowId);
+
+                if (window.Text is not null)
+                {
+                    InsertText(windowId, window.Text, transaction);
+                }
             }
 
             transaction.Commit();
@@ -224,11 +252,55 @@ public sealed class CaptureDatabase : IDisposable
         }
     }
 
+    /// <summary>Deletes the recognized text of all captures before <paramref name="cutoff"/>. Returns the number of rows removed.</summary>
+    public int DeleteTextBefore(DateTimeOffset cutoff)
+    {
+        lock (_lock)
+        {
+            using SqliteCommand command = _connection.CreateCommand();
+            command.CommandText = """
+                DELETE FROM capture_text WHERE capture_window_id IN (
+                    SELECT w.id FROM capture_windows w JOIN captures c ON c.id = w.capture_id
+                    WHERE c.timestamp < $cutoff);
+                """;
+            command.Parameters.AddWithValue("$cutoff", Format(cutoff));
+            return command.ExecuteNonQuery();
+        }
+    }
+
     public void Dispose()
     {
         lock (_lock)
         {
             _connection.Dispose();
+        }
+    }
+
+    private void InsertText(long windowId, IReadOnlyList<ScreenTextLine> lines, SqliteTransaction transaction)
+    {
+        using SqliteCommand command = _connection.CreateCommand();
+        command.Transaction = transaction;
+        command.CommandText = """
+            INSERT INTO capture_text (capture_window_id, line_index, text, left, top, right, bottom)
+            VALUES ($window, $index, $text, $left, $top, $right, $bottom);
+            """;
+        SqliteParameter index = command.Parameters.Add("$index", SqliteType.Integer);
+        SqliteParameter text = command.Parameters.Add("$text", SqliteType.Text);
+        SqliteParameter left = command.Parameters.Add("$left", SqliteType.Real);
+        SqliteParameter top = command.Parameters.Add("$top", SqliteType.Real);
+        SqliteParameter right = command.Parameters.Add("$right", SqliteType.Real);
+        SqliteParameter bottom = command.Parameters.Add("$bottom", SqliteType.Real);
+        command.Parameters.AddWithValue("$window", windowId);
+
+        for (int i = 0; i < lines.Count; i++)
+        {
+            index.Value = i;
+            text.Value = lines[i].Text;
+            left.Value = lines[i].Left;
+            top.Value = lines[i].Top;
+            right.Value = lines[i].Right;
+            bottom.Value = lines[i].Bottom;
+            command.ExecuteNonQuery();
         }
     }
 

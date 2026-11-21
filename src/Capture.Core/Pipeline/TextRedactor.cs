@@ -7,8 +7,12 @@ namespace Capture.Core.Pipeline;
 /// Reads the text in a window image, asks the detectors what must not be saved, and blacks those
 /// regions out. If the text cannot be read, the frame is dropped: an image that was not checked
 /// is never saved.
+///
+/// The recognized text itself comes along with the image, scrubbed the same way
+/// (see <see cref="ScreenText"/>), so it can be stored without the image.
 /// </summary>
-public sealed class TextRedactor(ITextRecognizer recognizer, IReadOnlyList<ISecretDetector> detectors) : IRedactor
+public sealed class TextRedactor(ITextRecognizer recognizer, IReadOnlyList<ISecretDetector> detectors, bool stripUrlQueries = false)
+    : IRedactor
 {
     /// <summary>Extra pixels blacked out around each region, to cover glyph edges the recognizer cut off.</summary>
     private const int Padding = 3;
@@ -30,11 +34,9 @@ public sealed class TextRedactor(ITextRecognizer recognizer, IReadOnlyList<ISecr
             return RedactionResult.Drop($"text recognition failed ({ex.GetType().Name} 0x{ex.HResult:X8})");
         }
 
-        var regions = new List<RectInt>();
-        foreach (ISecretDetector detector in detectors)
-        {
-            regions.AddRange(detector.FindSecrets(lines));
-        }
+        var scrubber = new TextScrubber(detectors, stripUrlQueries);
+        IReadOnlyList<RectInt> regions = scrubber.FindSecrets(lines);
+        IReadOnlyList<ScreenTextLine> text = ScreenText.Build(lines, regions, image.Width, image.Height, scrubber);
 
         var bounds = new RectInt(0, 0, image.Width, image.Height);
         byte[] pixels = image.Pixels;
@@ -49,6 +51,6 @@ public sealed class TextRedactor(ITextRecognizer recognizer, IReadOnlyList<ISecr
         }
 
         return RedactionResult.Redacted(new RedactedWindowImage(
-            image.Timestamp, image.Placement, image.Width, image.Height, image.DetachPixels(), regions.Count));
+            image.Timestamp, image.Placement, image.Width, image.Height, image.DetachPixels(), regions.Count, text));
     }
 }

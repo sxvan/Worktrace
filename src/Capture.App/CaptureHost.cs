@@ -69,7 +69,13 @@ internal static class CaptureHost
                                       + "Install one (Settings > Time & language > Language) or set redactSecrets to false.");
         }
 
-        using var database = new CaptureDatabase(paths.DatabaseFile);
+        if (config.StoreText && !config.RedactSecrets)
+        {
+            Log.Warning("storeText needs redactSecrets; no text will be stored");
+            Console.WriteLine("Note: storeText needs redactSecrets; no recognized text will be stored.");
+        }
+
+        using var database = new CaptureDatabase(paths.DatabaseFile, new TextScrubber([new HeuristicSecretDetector()], config.StripUrlQueries));
         var tracker = new ActivityTracker(TimeSpan.FromSeconds(config.IdleTimeoutSeconds));
         var rules = new WindowRuleMatcher(config.Rules);
 
@@ -91,13 +97,15 @@ internal static class CaptureHost
             Console.WriteLine("Note: borderless capture was denied; captured windows will show a border.");
         }
 
-        using Timer retentionTimer = StartRetention(paths, database, config.RetentionDays);
+        using Timer retentionTimer = StartRetention(paths, database, config.RetentionDays, config.TextRetentionDays);
 
         using var pipeline = new CapturePipeline(
             redactor,
             new FileImageStore(paths.Root, config.ImageQuality, Math.Clamp(config.ImageEncoderSpeed, 0, 9), config.MaxImageDimension),
             database,
-            config.DedupeThreshold);
+            config.DedupeThreshold,
+            config.StoreImages,
+            config.StoreText && config.RedactSecrets);
 
         var coordinator = new CaptureCoordinator(
             signals,
@@ -157,13 +165,13 @@ internal static class CaptureHost
         }
 
         Console.WriteLine($"Secret redaction: on (text recognition language {recognizer.LanguageTag})");
-        return new TextRedactor(recognizer, [new HeuristicSecretDetector()]);
+        return new TextRedactor(recognizer, [new HeuristicSecretDetector()], config.StripUrlQueries);
     }
 
     /// <summary>Retention runs on startup and once per day.</summary>
-    private static Timer StartRetention(AppPaths paths, CaptureDatabase database, int retentionDays)
+    private static Timer StartRetention(AppPaths paths, CaptureDatabase database, int retentionDays, int textRetentionDays)
     {
-        var retention = new RetentionCleaner(paths.Root, database, retentionDays);
+        var retention = new RetentionCleaner(paths.Root, database, retentionDays, textRetentionDays);
         return new Timer(_ =>
         {
             try
