@@ -1,12 +1,11 @@
 using Capture.Core.Capturing;
-using Capture.Core.Redaction;
 
 namespace Capture.Core.Pipeline;
 
 /// <summary>
 /// The picture of one capturable window straight from capture: the window's own size, showing only
-/// the parts that were visible on screen, the rest black. Not yet redacted, so it cannot be
-/// saved; see <see cref="RedactedWindowImage"/>. Disposing clears the pixel buffer.
+/// the parts that were visible on screen, the rest black. Saved as it is (encrypted); it is never
+/// redacted at capture time. Disposing clears the pixel buffer.
 /// </summary>
 public sealed class RawWindowImage(
     DateTimeOffset timestamp,
@@ -24,62 +23,6 @@ public sealed class RawWindowImage(
 
     /// <summary>BGRA, rows top to bottom.</summary>
     public byte[] Pixels => _pixels ?? throw new ObjectDisposedException(nameof(RawWindowImage));
-
-    /// <summary>Hands the buffer to the redaction stage; this object no longer owns or clears it.</summary>
-    internal byte[] DetachPixels()
-    {
-        byte[] pixels = Pixels;
-        _pixels = null;
-        return pixels;
-    }
-
-    public void Dispose()
-    {
-        if (_pixels is not null)
-        {
-            Array.Clear(_pixels);
-            _pixels = null;
-        }
-    }
-}
-
-/// <summary>
-/// A window image that has passed the redaction stage. This is the only type the image store
-/// accepts, and only redactors in this assembly can create it. Disposing clears the pixel buffer.
-/// </summary>
-public sealed class RedactedWindowImage : IDisposable
-{
-    private byte[]? _pixels;
-
-    internal RedactedWindowImage(
-        DateTimeOffset timestamp, WindowPlacement placement, int width, int height, byte[] pixels, int redactionCount,
-        IReadOnlyList<ScreenTextLine>? text = null)
-    {
-        RedactionCount = redactionCount;
-        Text = text;
-        Timestamp = timestamp;
-        Placement = placement;
-        Width = width;
-        Height = height;
-        _pixels = pixels;
-    }
-
-    public DateTimeOffset Timestamp { get; }
-    public WindowPlacement Placement { get; }
-    public int Width { get; }
-    public int Height { get; }
-
-    /// <summary>How many regions the redaction stage blacked out.</summary>
-    public int RedactionCount { get; }
-
-    /// <summary>
-    /// The text recognized in the image, secrets replaced, or null if the redactor did not read
-    /// the text (redaction switched off).
-    /// </summary>
-    public IReadOnlyList<ScreenTextLine>? Text { get; }
-
-    /// <summary>BGRA, rows top to bottom.</summary>
-    public byte[] Pixels => _pixels ?? throw new ObjectDisposedException(nameof(RedactedWindowImage));
 
     public void Dispose()
     {

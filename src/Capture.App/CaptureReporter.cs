@@ -52,22 +52,12 @@ internal static class CaptureReporter
         Console.WriteLine($"{Prefix(decision)} -> dropped (encoding is behind)");
     }
 
-    public static void WindowDroppedByRedaction(string? reason) =>
-        Log.Warning("Window image dropped by redaction: {Reason}", reason);
-
-    public static void NothingSaved(CaptureDecision decision, int droppedByRedaction) =>
-        Console.WriteLine($"{Prefix(decision)} -> {droppedByRedaction} window(s) dropped by redaction, nothing saved");
-
-    public static void Stored(
-        CaptureDecision decision, int windows, int saved, int redactions, int droppedByRedaction, long captureMs, long processMs)
+    public static void Stored(CaptureDecision decision, int windows, int saved, long captureMs, long processMs)
     {
         int unchanged = windows - saved;
-        Log.Information("Capture ({Trigger}): {Windows} window(s), {Saved} saved, {Duplicates} unchanged, {Redactions} region(s) redacted, {Dropped} dropped, capture {CaptureMs} ms, processing {ProcessMs} ms",
-            decision.Trigger.ToDbName(), windows, saved, unchanged, redactions, droppedByRedaction, captureMs, processMs);
-
-        string extra = (redactions > 0 ? $", {redactions} region(s) redacted" : "")
-                       + (droppedByRedaction > 0 ? $", {droppedByRedaction} dropped by redaction" : "");
-        Console.WriteLine($"{Prefix(decision)} -> {windows} window(s): {saved} saved, {unchanged} unchanged{extra} (capture {captureMs} ms, process {processMs} ms)");
+        Log.Information("Capture ({Trigger}): {Windows} window(s), {Saved} saved, {Duplicates} unchanged, capture {CaptureMs} ms, processing {ProcessMs} ms",
+            decision.Trigger.ToDbName(), windows, saved, unchanged, captureMs, processMs);
+        Console.WriteLine($"{Prefix(decision)} -> {windows} window(s): {saved} saved, {unchanged} unchanged (capture {captureMs} ms, process {processMs} ms)");
     }
 
     private static string Prefix(CaptureDecision decision) =>

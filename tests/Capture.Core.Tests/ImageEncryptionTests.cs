@@ -105,7 +105,7 @@ public sealed class ImageEncryptionTests : IDisposable
 
         byte[] onDisk = File.ReadAllBytes(Path.Combine(_root, path));
         Assert.True(ImageCipher.IsEncrypted(onDisk));
-        Assert.Equal(Png, store.Read(path));
+        Assert.Equal(Png, store.ReadUnredacted(path));
         Assert.Empty(Directory.GetFiles(Path.Combine(_root, "captures", "2026-11-21"), "*.tmp"));
     }
 
@@ -118,7 +118,7 @@ public sealed class ImageEncryptionTests : IDisposable
         store.Write(b, Day, (byte[])Png.Clone());
         File.Copy(Path.Combine(_root, a), Path.Combine(_root, b), overwrite: true);
 
-        Assert.ThrowsAny<CryptographicException>(() => store.Read(b));
+        Assert.ThrowsAny<CryptographicException>(() => store.ReadUnredacted(b));
     }
 
     [Fact]
@@ -129,7 +129,7 @@ public sealed class ImageEncryptionTests : IDisposable
         store.Write(path, Day, (byte[])Png.Clone());
         _database.DeleteDayKeysBefore(Day.AddDays(1));
 
-        Assert.ThrowsAny<CryptographicException>(() => Store().Read(path));
+        Assert.ThrowsAny<CryptographicException>(() => Store().ReadUnredacted(path));
     }
 
     [Fact]
@@ -139,8 +139,8 @@ public sealed class ImageEncryptionTests : IDisposable
         Directory.CreateDirectory(Path.GetDirectoryName(Path.Combine(_root, path))!);
         File.WriteAllBytes(Path.Combine(_root, path), Png);
 
-        Assert.Equal(Png, Store().Read(path));
-        Assert.Equal(Png, new FileImageStore(_root, 0).Read(path));
+        Assert.Equal(Png, Store().ReadUnredacted(path));
+        Assert.Equal(Png, new FileImageStore(_root, 0).ReadUnredacted(path));
     }
 
     [Fact]
@@ -151,12 +151,12 @@ public sealed class ImageEncryptionTests : IDisposable
         store.Write(PathFor(old, "a.png.enc"), old, (byte[])Png.Clone());
         store.Write(PathFor(Day, "b.png.enc"), Day, (byte[])Png.Clone());
 
-        new RetentionCleaner(_root, _database, retentionDays: 14, textRetentionDays: 30).Run(Day);
+        new RetentionCleaner(_root, _database, retentionDays: 14).Run(Day);
 
         Assert.Null(_database.GetWrappedDayKey(old));
         Assert.NotNull(_database.GetWrappedDayKey(Day));
         Assert.False(Directory.Exists(Path.Combine(_root, "captures", old.ToString("yyyy-MM-dd"))));
-        Assert.Equal(Png, store.Read(PathFor(Day, "b.png.enc")));
+        Assert.Equal(Png, store.ReadUnredacted(PathFor(Day, "b.png.enc")));
     }
 
     [Fact]
@@ -171,6 +171,34 @@ public sealed class ImageEncryptionTests : IDisposable
         Assert.Equal((1, 0), (exported, failed));
         Assert.Equal(Png, File.ReadAllBytes(Path.Combine(target, "a.png")));
         Assert.Equal([Day], store.Days());
+    }
+
+    [Fact]
+    public void Database_of_an_earlier_version_is_refused()
+    {
+        string old = Path.Combine(_root, "old.db");
+        using (var connection = new SqliteConnection($"Data Source={old};Pooling=False"))
+        {
+            connection.Open();
+            using SqliteCommand command = connection.CreateCommand();
+            command.CommandText = "CREATE TABLE capture_text (id INTEGER PRIMARY KEY); PRAGMA user_version=5;";
+            command.ExecuteNonQuery();
+        }
+
+        var error = Assert.Throws<InvalidDataException>(() => new CaptureDatabase(old, new TextScrubber([])));
+        Assert.Contains("delete it", error.Message);
+    }
+
+    [Fact]
+    public void New_database_has_no_text_table()
+    {
+        using var connection = new SqliteConnection($"Data Source={Path.Combine(_root, "capture.db")};Pooling=False");
+        connection.Open();
+        using SqliteCommand command = connection.CreateCommand();
+        command.CommandText = "SELECT count(*) FROM sqlite_master WHERE name = 'capture_text';";
+        Assert.Equal(0L, (long)command.ExecuteScalar()!);
+        command.CommandText = "PRAGMA user_version;";
+        Assert.Equal((long)CaptureDatabase.SchemaVersion, (long)command.ExecuteScalar()!);
     }
 
     [Fact]

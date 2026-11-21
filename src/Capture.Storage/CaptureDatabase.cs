@@ -11,7 +11,6 @@ namespace Capture.Storage;
 /// <summary>One capturable window of a capture, as stored in capture_windows.</summary>
 /// <param name="FilePath">Relative path of the saved image, or null if it duplicates an earlier one.</param>
 /// <param name="DedupeReferenceId">capture_windows.id of the earlier image this one duplicates.</param>
-/// <param name="Text">Recognized text to store with the window, already scrubbed; null stores none.</param>
 public sealed record CapturedWindowRecord(
     WindowPlacement Placement,
     bool IsFocused,
@@ -19,20 +18,24 @@ public sealed record CapturedWindowRecord(
     int Height,
     ulong DHash,
     string? FilePath,
-    long? DedupeReferenceId,
-    int RedactionCount = 0,
-    IReadOnlyList<ScreenTextLine>? Text = null);
+    long? DedupeReferenceId);
 
 /// <summary>
 /// The SQLite database. WAL mode and short transactions, so a crash or kill cannot corrupt it.
 /// All members are safe to call from several threads.
 ///
 /// Every window title passes through the title scrubber on its way in, so no title reaches the
-/// disk without the secret check.
+/// disk without the secret check. Text recognized in screenshots is never stored.
 /// </summary>
 public sealed class CaptureDatabase : IDisposable
 {
     private const string TimestampFormat = "yyyy-MM-dd'T'HH:mm:ss.fff'Z'";
+
+    /// <summary>
+    /// Schema version. Databases of earlier versions (which stored recognized text) are not
+    /// migrated: the app refuses to open them, and they have to be deleted.
+    /// </summary>
+    public const int SchemaVersion = 6;
 
     private readonly Lock _lock = new();
     private readonly SqliteConnection _connection;
@@ -49,6 +52,15 @@ public sealed class CaptureDatabase : IDisposable
             Pooling = false,
         }.ToString());
         _connection.Open();
+
+        long version = (long)Scalar("PRAGMA user_version;")!;
+        if (version is > 0 and < SchemaVersion)
+        {
+            _connection.Dispose();
+            throw new InvalidDataException(
+                $"{path} was created by an earlier version of the app (schema {version}) and may contain recognized "
+                + "screen text. It is not migrated: delete it (with its -wal and -shm files) and start again.");
+        }
 
         Execute("PRAGMA journal_mode=WAL;");
         Execute("PRAGMA synchronous=NORMAL;");
@@ -111,24 +123,9 @@ public sealed class CaptureDatabase : IDisposable
                 height           INTEGER NOT NULL,
                 dhash            INTEGER NOT NULL,
                 file_path        TEXT,               -- null if deduplicated or removed by retention
-                dedupe_ref_id    INTEGER REFERENCES capture_windows(id),
-                redaction_count  INTEGER NOT NULL DEFAULT 0   -- regions blacked out by redaction
+                dedupe_ref_id    INTEGER REFERENCES capture_windows(id)
             );
             CREATE INDEX IF NOT EXISTS ix_capture_windows_capture ON capture_windows(capture_id);
-
-            -- Recognized text of a captured window, secrets replaced (layer 2). One row per text
-            -- segment; the box is relative to the window image, 0..1.
-            CREATE TABLE IF NOT EXISTS capture_text (
-                id                INTEGER PRIMARY KEY,
-                capture_window_id INTEGER NOT NULL REFERENCES capture_windows(id),
-                line_index        INTEGER NOT NULL,
-                text              TEXT NOT NULL,
-                left              REAL NOT NULL,
-                top               REAL NOT NULL,
-                right             REAL NOT NULL,
-                bottom            REAL NOT NULL
-            );
-            CREATE INDEX IF NOT EXISTS ix_capture_text_window ON capture_text(capture_window_id);
 
             -- One encryption key per day for the stored images, wrapped with DPAPI (never in the
             -- clear). Retention deletes the rows of expired days, which makes their images unrecoverable.
@@ -137,7 +134,7 @@ public sealed class CaptureDatabase : IDisposable
                 wrapped_key BLOB NOT NULL
             );
 
-            PRAGMA user_version=5;
+            PRAGMA user_version=6;
             """);
     }
 
@@ -198,12 +195,12 @@ public sealed class CaptureDatabase : IDisposable
                         capture_id, window_handle, process_name, window_title,
                         left, top, right, bottom,
                         visible_left, visible_top, visible_right, visible_bottom, visible_fraction,
-                        z_index, is_focused, monitor_id, width, height, dhash, file_path, dedupe_ref_id, redaction_count)
+                        z_index, is_focused, monitor_id, width, height, dhash, file_path, dedupe_ref_id)
                     VALUES (
                         $capture, $handle, $process, $title,
                         $left, $top, $right, $bottom,
                         $vleft, $vtop, $vright, $vbottom, $vfraction,
-                        $z, $focused, $monitor, $width, $height, $dhash, $path, $ref, $redactions)
+                        $z, $focused, $monitor, $width, $height, $dhash, $path, $ref)
                     RETURNING id;
                     """;
                 command.Parameters.AddWithValue("$capture", captureId);
@@ -227,14 +224,7 @@ public sealed class CaptureDatabase : IDisposable
                 command.Parameters.AddWithValue("$dhash", unchecked((long)window.DHash));
                 command.Parameters.AddWithValue("$path", (object?)window.FilePath ?? DBNull.Value);
                 command.Parameters.AddWithValue("$ref", (object?)window.DedupeReferenceId ?? DBNull.Value);
-                command.Parameters.AddWithValue("$redactions", window.RedactionCount);
-                long windowId = (long)command.ExecuteScalar()!;
-                ids.Add(windowId);
-
-                if (window.Text is not null)
-                {
-                    InsertText(windowId, window.Text, transaction);
-                }
+                ids.Add((long)command.ExecuteScalar()!);
             }
 
             transaction.Commit();
@@ -306,55 +296,11 @@ public sealed class CaptureDatabase : IDisposable
 
     private static string DayText(DateOnly day) => day.ToString(FileImageStore.DayFolderFormat, CultureInfo.InvariantCulture);
 
-    /// <summary>Deletes the recognized text of all captures before <paramref name="cutoff"/>. Returns the number of rows removed.</summary>
-    public int DeleteTextBefore(DateTimeOffset cutoff)
-    {
-        lock (_lock)
-        {
-            using SqliteCommand command = _connection.CreateCommand();
-            command.CommandText = """
-                DELETE FROM capture_text WHERE capture_window_id IN (
-                    SELECT w.id FROM capture_windows w JOIN captures c ON c.id = w.capture_id
-                    WHERE c.timestamp < $cutoff);
-                """;
-            command.Parameters.AddWithValue("$cutoff", Format(cutoff));
-            return command.ExecuteNonQuery();
-        }
-    }
-
     public void Dispose()
     {
         lock (_lock)
         {
             _connection.Dispose();
-        }
-    }
-
-    private void InsertText(long windowId, IReadOnlyList<ScreenTextLine> lines, SqliteTransaction transaction)
-    {
-        using SqliteCommand command = _connection.CreateCommand();
-        command.Transaction = transaction;
-        command.CommandText = """
-            INSERT INTO capture_text (capture_window_id, line_index, text, left, top, right, bottom)
-            VALUES ($window, $index, $text, $left, $top, $right, $bottom);
-            """;
-        SqliteParameter index = command.Parameters.Add("$index", SqliteType.Integer);
-        SqliteParameter text = command.Parameters.Add("$text", SqliteType.Text);
-        SqliteParameter left = command.Parameters.Add("$left", SqliteType.Real);
-        SqliteParameter top = command.Parameters.Add("$top", SqliteType.Real);
-        SqliteParameter right = command.Parameters.Add("$right", SqliteType.Real);
-        SqliteParameter bottom = command.Parameters.Add("$bottom", SqliteType.Real);
-        command.Parameters.AddWithValue("$window", windowId);
-
-        for (int i = 0; i < lines.Count; i++)
-        {
-            index.Value = i;
-            text.Value = lines[i].Text;
-            left.Value = lines[i].Left;
-            top.Value = lines[i].Top;
-            right.Value = lines[i].Right;
-            bottom.Value = lines[i].Bottom;
-            command.ExecuteNonQuery();
         }
     }
 
@@ -377,6 +323,13 @@ public sealed class CaptureDatabase : IDisposable
         command.Parameters.AddWithValue("$scale", monitor.Scale);
         command.Parameters.AddWithValue("$primary", monitor.IsPrimary ? 1 : 0);
         return (long)command.ExecuteScalar()!;
+    }
+
+    private object? Scalar(string sql)
+    {
+        using SqliteCommand command = _connection.CreateCommand();
+        command.CommandText = sql;
+        return command.ExecuteScalar();
     }
 
     private void Execute(string sql)

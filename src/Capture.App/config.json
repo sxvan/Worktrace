@@ -10,13 +10,10 @@
     { "process": "*", "mode": "capture" }
   ],
   "retentionDays": 14,
-  "storeText": true,
-  "textRetentionDays": 30,
   "storeImages": true,
   "encryptImages": true,
   "maxImageDimension": 0,
   "dedupeThreshold": 4,
-  "redactSecrets": true,
   "stripUrlQueries": false,
   "skipPasswordFields": true
 }
