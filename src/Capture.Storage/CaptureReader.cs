@@ -8,8 +8,15 @@ namespace Capture.Storage;
 /// <summary>A captured window with an image file, as the screenshot command needs it.</summary>
 /// <param name="WindowId">capture_windows.id of the window that was asked for.</param>
 /// <param name="RelativePath">The image file, which may belong to an earlier window this one duplicates.</param>
+/// <param name="ImageTimestamp">When the image was taken: earlier than <paramref name="Timestamp"/> if the window counted as unchanged and the image is reused.</param>
+/// <param name="ImageWindowTitle">The window title when the image was taken.</param>
 public sealed record StoredScreenshot(
-    long WindowId, DateTimeOffset Timestamp, string ProcessName, string WindowTitle, bool IsFocused, string RelativePath);
+    long WindowId, DateTimeOffset Timestamp, string ProcessName, string WindowTitle, bool IsFocused, string RelativePath,
+    DateTimeOffset ImageTimestamp, string ImageWindowTitle)
+{
+    /// <summary>The image belongs to an earlier capture of this window.</summary>
+    public bool IsReused => ImageTimestamp != Timestamp;
+}
 
 /// <summary>
 /// Read-only access to the database for the command line tool. Opens the file read-only, so it
@@ -119,10 +126,13 @@ public sealed class CaptureReader : IDisposable
     {
         using SqliteCommand command = _connection.CreateCommand();
         command.CommandText = """
-            SELECT w.id, c.timestamp, w.process_name, w.window_title, w.is_focused, coalesce(w.file_path, r.file_path)
+            SELECT w.id, c.timestamp, w.process_name, w.window_title, w.is_focused, coalesce(w.file_path, r.file_path),
+                   CASE WHEN w.file_path IS NULL THEN rc.timestamp ELSE c.timestamp END,
+                   CASE WHEN w.file_path IS NULL THEN r.window_title ELSE w.window_title END
             FROM capture_windows w
             JOIN captures c ON c.id = w.capture_id
             LEFT JOIN capture_windows r ON r.id = w.dedupe_ref_id
+            LEFT JOIN captures rc ON rc.id = r.capture_id
             WHERE w.id = $id;
             """;
         command.Parameters.AddWithValue("$id", windowId);
@@ -137,10 +147,13 @@ public sealed class CaptureReader : IDisposable
     {
         using SqliteCommand command = _connection.CreateCommand();
         command.CommandText = """
-            SELECT w.id, c.timestamp, w.process_name, w.window_title, w.is_focused, coalesce(w.file_path, r.file_path)
+            SELECT w.id, c.timestamp, w.process_name, w.window_title, w.is_focused, coalesce(w.file_path, r.file_path),
+                   CASE WHEN w.file_path IS NULL THEN rc.timestamp ELSE c.timestamp END,
+                   CASE WHEN w.file_path IS NULL THEN r.window_title ELSE w.window_title END
             FROM capture_windows w
             JOIN captures c ON c.id = w.capture_id
             LEFT JOIN capture_windows r ON r.id = w.dedupe_ref_id
+            LEFT JOIN captures rc ON rc.id = r.capture_id
             WHERE c.timestamp >= $from AND c.timestamp <= $to AND w.is_focused = 1
               AND coalesce(w.file_path, r.file_path) IS NOT NULL
             ORDER BY abs(julianday(c.timestamp) - julianday($at)), w.id
@@ -180,7 +193,7 @@ public sealed class CaptureReader : IDisposable
         }
         return new StoredScreenshot(
             reader.GetInt64(0), Parse(reader.GetString(1)), reader.GetString(2), reader.GetString(3),
-            reader.GetInt64(4) != 0, reader.GetString(5));
+            reader.GetInt64(4) != 0, reader.GetString(5), Parse(reader.GetString(6)), reader.GetString(7));
     }
 
     private static string Format(DateTimeOffset timestamp) =>

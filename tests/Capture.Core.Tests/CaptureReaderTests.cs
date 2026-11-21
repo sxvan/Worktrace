@@ -93,6 +93,11 @@ public sealed class CaptureReaderTests : IDisposable
 
         Assert.Equal(duplicate, shot.WindowId);
         Assert.EndsWith("a.png.enc", shot.RelativePath);
+        // The image is the one taken a minute earlier, and says so.
+        Assert.True(shot.IsReused);
+        Assert.Equal(T0.AddMinutes(1), shot.ImageTimestamp);
+        Assert.Equal(T0.AddMinutes(2), shot.Timestamp);
+        Assert.False(reader.FindScreenshot(first)!.IsReused);
         Assert.Equal(Png, reader.ReadUnredactedImage(_root, shot, _protector));
     }
 
@@ -124,7 +129,7 @@ public sealed class CaptureReaderTests : IDisposable
     {
         File.WriteAllBytes(Path.Combine(_root, "elsewhere.png"), Png);
         using var reader = new CaptureReader(_dbPath);
-        var shot = new StoredScreenshot(1, T0, "x", "y", true, @"..\elsewhere.png");
+        var shot = new StoredScreenshot(1, T0, "x", "y", true, @"..\elsewhere.png", T0, "y");
 
         Assert.Throws<IOException>(() => reader.ReadUnredactedImage(_root, shot, _protector));
     }

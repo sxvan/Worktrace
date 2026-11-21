@@ -132,7 +132,7 @@ public sealed class CapturePipeline : IDisposable
 
                 // Dedupe first: an unchanged window is not saved again. The 64-bit hash goes to the database.
                 ulong hash = DHash.Compute(raw.Pixels, width, height);
-                long? duplicateOf = _deduplicator.FindDuplicate(handle, width, height, hash, day);
+                long? duplicateOf = _deduplicator.FindDuplicate(handle, raw.Placement.Window.Title, width, height, hash, day);
                 if (duplicateOf is not null)
                 {
                     records.Add(new CapturedWindowRecord(raw.Placement, focused, width, height, hash, null, duplicateOf));
@@ -167,7 +167,7 @@ public sealed class CapturePipeline : IDisposable
                 if (records[i].DedupeReferenceId is null && records[i].FilePath is not null)
                 {
                     _deduplicator.Remember(
-                        records[i].Placement.Window.Handle, windowSizes[i].Width, windowSizes[i].Height, records[i].DHash, day, ids[i]);
+                        records[i].Placement.Window.Handle, records[i].Placement.Window.Title, windowSizes[i].Width, windowSizes[i].Height, records[i].DHash, day, ids[i]);
                 }
             }
         }

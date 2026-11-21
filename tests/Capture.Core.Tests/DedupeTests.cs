@@ -73,38 +73,49 @@ public class DedupeTests
     [Fact]
     public void Nothing_saved_yet_is_never_a_duplicate()
     {
-        Assert.Null(new Deduplicator(4).FindDuplicate(1, 100, 100, 0xFF, Today));
+        Assert.Null(new Deduplicator(4).FindDuplicate(1, "t", 100, 100, 0xFF, Today));
     }
 
     [Fact]
     public void Hash_within_the_threshold_is_a_duplicate_of_the_last_saved_image()
     {
         var dedupe = new Deduplicator(4);
-        dedupe.Remember(1, 100, 100, 0b0000, Today, imageId: 42);
+        dedupe.Remember(1, "t", 100, 100, 0b0000, Today, imageId: 42);
 
-        Assert.Equal(42, dedupe.FindDuplicate(1, 100, 100, 0b1111, Today));  // distance 4
-        Assert.Null(dedupe.FindDuplicate(1, 100, 100, 0b11111, Today));      // distance 5
+        Assert.Equal(42, dedupe.FindDuplicate(1, "t", 100, 100, 0b1111, Today));  // distance 4
+        Assert.Null(dedupe.FindDuplicate(1, "t", 100, 100, 0b11111, Today));      // distance 5
     }
 
     [Fact]
     public void Images_are_only_compared_within_the_same_window_size_and_day()
     {
         var dedupe = new Deduplicator(4);
-        dedupe.Remember(1, 100, 100, 0, Today, imageId: 42);
+        dedupe.Remember(1, "t", 100, 100, 0, Today, imageId: 42);
 
-        Assert.Null(dedupe.FindDuplicate(2, 100, 100, 0, Today));
-        Assert.Null(dedupe.FindDuplicate(1, 120, 100, 0, Today));
-        Assert.Null(dedupe.FindDuplicate(1, 100, 100, 0, Today.AddDays(1)));
+        Assert.Null(dedupe.FindDuplicate(2, "t", 100, 100, 0, Today));
+        Assert.Null(dedupe.FindDuplicate(1, "t", 120, 100, 0, Today));
+        Assert.Null(dedupe.FindDuplicate(1, "t", 100, 100, 0, Today.AddDays(1)));
     }
 
     [Fact]
     public void Comparison_is_against_the_last_saved_image_not_the_last_seen_one()
     {
         var dedupe = new Deduplicator(4);
-        dedupe.Remember(1, 100, 100, 0b000000, Today, imageId: 1);
+        dedupe.Remember(1, "t", 100, 100, 0b000000, Today, imageId: 1);
 
         // Drifts 3 bits at a time; each step is close to the previous one but not remembered.
-        Assert.Equal(1, dedupe.FindDuplicate(1, 100, 100, 0b000111, Today));
-        Assert.Null(dedupe.FindDuplicate(1, 100, 100, 0b111111, Today));
+        Assert.Equal(1, dedupe.FindDuplicate(1, "t", 100, 100, 0b000111, Today));
+        Assert.Null(dedupe.FindDuplicate(1, "t", 100, 100, 0b111111, Today));
+    }
+
+    [Fact]
+    public void A_changed_title_is_never_a_duplicate()
+    {
+        var dedupe = new Deduplicator(4);
+        dedupe.Remember(1, "id_ed25519.pub - Notepad++", 100, 100, 0, Today, imageId: 42);
+
+        // Same window, same picture as far as the hash can tell, but another tab.
+        Assert.Null(dedupe.FindDuplicate(1, "new 56 - Notepad++", 100, 100, 0, Today));
+        Assert.Equal(42, dedupe.FindDuplicate(1, "id_ed25519.pub - Notepad++", 100, 100, 0, Today));
     }
 }

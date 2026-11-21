@@ -60,18 +60,21 @@ public static class DHash
 
 /// <summary>
 /// Remembers the last saved image per window and tells whether a new one is close enough to it
-/// to be skipped. An image is only compared with one saved on the same day and of the same size.
+/// to be skipped. An image is only compared with one saved on the same day, of the same size and
+/// with the same window title: a changed title means changed content (another tab, another file),
+/// which the coarse hash cannot see.
 /// </summary>
 public sealed class Deduplicator(int maxDistance)
 {
-    private sealed record Saved(long ImageId, ulong Hash, int Width, int Height, DateOnly Day);
+    private sealed record Saved(long ImageId, string? Title, ulong Hash, int Width, int Height, DateOnly Day);
 
     private readonly Dictionary<long, Saved> _lastSaved = [];
 
     /// <summary>Returns the id of the earlier image this one duplicates, or null if it should be saved.</summary>
-    public long? FindDuplicate(long windowHandle, int width, int height, ulong hash, DateOnly day)
+    public long? FindDuplicate(long windowHandle, string? title, int width, int height, ulong hash, DateOnly day)
     {
         if (_lastSaved.TryGetValue(windowHandle, out Saved? saved)
+            && string.Equals(saved.Title, title, StringComparison.Ordinal)
             && saved.Day == day && saved.Width == width && saved.Height == height
             && DHash.HammingDistance(saved.Hash, hash) <= maxDistance)
         {
@@ -80,13 +83,13 @@ public sealed class Deduplicator(int maxDistance)
         return null;
     }
 
-    public void Remember(long windowHandle, int width, int height, ulong hash, DateOnly day, long imageId)
+    public void Remember(long windowHandle, string? title, int width, int height, ulong hash, DateOnly day, long imageId)
     {
         // Entries from earlier days can never match again.
         foreach (long stale in _lastSaved.Where(e => e.Value.Day != day).Select(e => e.Key).ToList())
         {
             _lastSaved.Remove(stale);
         }
-        _lastSaved[windowHandle] = new Saved(imageId, hash, width, height, day);
+        _lastSaved[windowHandle] = new Saved(imageId, title, hash, width, height, day);
     }
 }

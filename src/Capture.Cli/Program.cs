@@ -212,11 +212,29 @@ internal static class Program
 
         Console.WriteLine(string.Create(CultureInfo.InvariantCulture,
             $"Screenshot {screenshot.WindowId}, {screenshot.Timestamp.ToLocalTime():yyyy-MM-dd HH:mm:ss}, {screenshot.ProcessName} \"{screenshot.WindowTitle}\"{(screenshot.IsFocused ? "" : " (not focused)")}"));
+        Console.Write(ReuseNote(screenshot));
         Console.WriteLine("Shared by the user after review. Redacted parts are black in the image and [redacted] in the text.");
         Console.WriteLine($"Image: {target}");
         Console.WriteLine("Text (left,top widthxheight in image pixels, then the line):");
         Console.Write(ScreenshotReview.TextListing(text).Replace("\r\n", "\n"));
         return 0;
+    }
+
+    /// <summary>
+    /// For an image reused from an earlier capture of the window (the window counted as unchanged),
+    /// a line that says when it was taken and under which title; empty otherwise.
+    /// </summary>
+    internal static string ReuseNote(StoredScreenshot screenshot)
+    {
+        if (!screenshot.IsReused)
+        {
+            return "";
+        }
+        string taken = screenshot.ImageTimestamp.ToLocalTime().ToString("HH:mm:ss", CultureInfo.InvariantCulture);
+        return screenshot.ImageWindowTitle == screenshot.WindowTitle
+            ? $"Note: the window counted as unchanged, so this image is from an earlier capture at {taken}.\n"
+            : $"Note: the window counted as unchanged, so this image is from an earlier capture at {taken}, "
+              + $"when the title was \"{screenshot.ImageWindowTitle}\".\n";
     }
 
     /// <summary>The image with the regions painted black, as PNG.</summary>

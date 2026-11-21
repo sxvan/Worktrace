@@ -40,12 +40,13 @@ internal sealed class ScreenshotReview : Form
         {
             Dock = DockStyle.Top,
             AutoSize = false,
-            Height = 76,
+            Height = screenshot.IsReused ? 100 : 76,
             Padding = new Padding(10, 8, 10, 4),
             Font = new Font(Font.FontFamily, 10f),
             Text =
                 $"Claude asks to see the screenshot of {screenshot.ProcessName} \"{screenshot.WindowTitle}\", "
                 + $"{screenshot.Timestamp.ToLocalTime():dddd yyyy-MM-dd HH:mm:ss}.\n"
+                + Program.ReuseNote(screenshot)
                 + $"Black boxes: {hiddenCount} part(s) hidden by the redaction rules. If you share, Claude receives exactly this "
                 + "image and the text on the right. Check both for anything that must not leave this machine.",
         };
