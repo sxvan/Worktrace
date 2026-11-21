@@ -30,12 +30,12 @@ public sealed class CapturePipeline : IDisposable
     private readonly BlockingCollection<Job> _queue = new(MaxQueuedCaptures);
     private readonly Thread _thread;
 
-    public CapturePipeline(IImageStore imageStore, CaptureDatabase database, int dedupeThreshold, bool storeImages)
+    public CapturePipeline(IImageStore imageStore, CaptureDatabase database, bool storeImages)
     {
         _storeImages = storeImages;
         _imageStore = imageStore;
         _database = database;
-        _deduplicator = new Deduplicator(dedupeThreshold);
+        _deduplicator = new Deduplicator();
         _thread = new Thread(Run)
         {
             IsBackground = true,
@@ -118,6 +118,8 @@ public sealed class CapturePipeline : IDisposable
         var records = new List<CapturedWindowRecord>();
         var writtenFiles = new List<string>();
         var windowSizes = new List<(int Width, int Height)>();
+        // Grayscale copies of the windows whose image is saved, for comparing later captures.
+        var grays = new List<byte[]?>();
         DateOnly day = DateOnly.FromDateTime(job.Decision.Timestamp.LocalDateTime);
 
         try
@@ -130,15 +132,20 @@ public sealed class CapturePipeline : IDisposable
                 bool focused = handle == job.Capture.FocusedWindowHandle;
                 int width = raw.Width, height = raw.Height;
 
-                // Dedupe first: an unchanged window is not saved again. The 64-bit hash goes to the database.
+                // Dedupe first: an unchanged window is not saved again. It is compared with the last
+                // saved image of the window at full resolution; the 64-bit hash only goes to the database.
                 ulong hash = DHash.Compute(raw.Pixels, width, height);
-                long? duplicateOf = _deduplicator.FindDuplicate(handle, raw.Placement.Window.Title, width, height, hash, day);
+                byte[] gray = Deduplicator.Grayscale(raw.Pixels, width, height);
+                long? duplicateOf = _deduplicator.FindDuplicate(handle, raw.Placement.Window.Title, width, height, gray, day);
                 if (duplicateOf is not null)
                 {
+                    Array.Clear(gray);
                     records.Add(new CapturedWindowRecord(raw.Placement, focused, width, height, hash, null, duplicateOf));
                     windowSizes.Add((width, height));
+                    grays.Add(null);
                     continue;
                 }
+                grays.Add(gray);
 
                 SavedImage? saved = null;
                 if (_storeImages)
@@ -164,15 +171,18 @@ public sealed class CapturePipeline : IDisposable
             for (int i = 0; i < records.Count; i++)
             {
                 // Later duplicates can point at a window whose image was kept.
-                if (records[i].DedupeReferenceId is null && records[i].FilePath is not null)
+                if (records[i].DedupeReferenceId is null && records[i].FilePath is not null && grays[i] is { } gray)
                 {
                     _deduplicator.Remember(
-                        records[i].Placement.Window.Handle, records[i].Placement.Window.Title, windowSizes[i].Width, windowSizes[i].Height, records[i].DHash, day, ids[i]);
+                        records[i].Placement.Window.Handle, records[i].Placement.Window.Title,
+                        windowSizes[i].Width, windowSizes[i].Height, gray, day, ids[i]);
+                    grays[i] = null;
                 }
             }
         }
         catch
         {
+            ClearAll(grays);
             // Files without database rows would be orphans: remove them again.
             foreach (string path in writtenFiles)
             {
@@ -188,7 +198,20 @@ public sealed class CapturePipeline : IDisposable
             throw;
         }
 
+        // Copies of windows that were not remembered (images not stored) are no longer needed.
+        ClearAll(grays);
         CaptureReporter.Stored(job.Decision, records.Count, writtenFiles.Count, job.CaptureMs, stopwatch.ElapsedMilliseconds);
+    }
+
+    private static void ClearAll(List<byte[]?> buffers)
+    {
+        foreach (byte[]? buffer in buffers)
+        {
+            if (buffer is not null)
+            {
+                Array.Clear(buffer);
+            }
+        }
     }
 
     private static void DisposeImages(CaptureResult capture)

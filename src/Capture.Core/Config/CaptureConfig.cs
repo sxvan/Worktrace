@@ -53,9 +53,6 @@ public sealed class CaptureConfig
     /// </summary>
     public int MaxImageDimension { get; set; }
 
-    /// <summary>Maximum dHash Hamming distance at which two images count as the same.</summary>
-    public int DedupeThreshold { get; set; } = 4;
-
     /// <summary>
     /// Cut the query string and fragment off URLs in stored window titles. The secret check
     /// already replaces values that look like secrets; this also drops the ones it does not

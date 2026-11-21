@@ -43,7 +43,9 @@ Some things are never recorded, whatever the rules say:
 - The screen while a password field has focus (`skipPasswordFields`).
 
 Screenshots are stored as lossless PNG files at full size, encrypted (`encryptImages`), and deleted
-after `retentionDays` days. Window titles and events are kept.
+after `retentionDays` days. Window titles and events are kept. A window that looks exactly as in
+its last stored screenshot is not stored again: same title, and no visible change when the two are
+compared pixel by pixel at full size (a blinking text cursor does not count).
 
 Databases created by earlier versions (which stored recognized text) are not migrated: the app
 refuses to start with one. Delete `capture.db` (and `capture.db-wal`, `capture.db-shm`) in the
@@ -131,7 +133,6 @@ never captured and do not hide the windows below them.
 | `storeImages` | true | Keep the screenshots (layer 2). Off keeps titles and timing only. |
 | `encryptImages` | true | Encrypt the screenshots on disk, see [Protection on disk](#protection-on-disk). |
 | `maxImageDimension` | 0 | Screenshots are scaled down so the longer side has at most this many pixels. 0 keeps the original size, which keeps small text readable. |
-| `dedupeThreshold` | 4 | How similar a screenshot must be to the previous one to count as a duplicate. Higher values treat more screenshots as duplicates. |
 | `stripUrlQueries` | false | Cut query strings and fragments off URLs in stored window titles, also where the secret check sees nothing. |
 | `skipPasswordFields` | true | Take no screenshot while a password field has focus. |
 

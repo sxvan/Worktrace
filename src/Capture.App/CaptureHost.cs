@@ -99,7 +99,7 @@ internal static class CaptureHost
             Console.WriteLine("Note: encryptImages is false; screenshots are stored unencrypted.");
         }
 
-        using var pipeline = new CapturePipeline(imageStore, database, config.DedupeThreshold, config.StoreImages);
+        using var pipeline = new CapturePipeline(imageStore, database, config.StoreImages);
 
         var coordinator = new CaptureCoordinator(
             signals,
