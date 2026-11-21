@@ -11,11 +11,13 @@
     <!-- Per-monitor DPI awareness is declared in the manifest on purpose: it must hold before any code runs. -->
     <NoWarn>$(NoWarn);WFO0003</NoWarn>
 
-    <!-- dotnet publish -c Release produces one self-contained TimeCapture.exe. Native libraries
-         (image encoder, SQLite) are packed inside and unpacked to a per-user temp folder at start. -->
+    <!-- dotnet publish -c Release produces a self-contained TimeCapture.exe with the native
+         libraries (image encoder, SQLite) next to it. They are not packed into the exe, because
+         packed libraries are unpacked to a temp folder at start, where any process of the user
+         could replace them. -->
     <SelfContained>true</SelfContained>
     <PublishSingleFile>true</PublishSingleFile>
-    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+    <IncludeNativeLibrariesForSelfExtract>false</IncludeNativeLibrariesForSelfExtract>
     <DebugType>embedded</DebugType>
     <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
   </PropertyGroup>

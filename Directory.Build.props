@@ -4,5 +4,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <LangVersion>latest</LangVersion>
     <DebugType>embedded</DebugType>
+    <!-- The release number of the app. Raise it for every release. -->
+    <Version>0.1.0</Version>
   </PropertyGroup>
 </Project>
