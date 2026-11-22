@@ -17,8 +17,6 @@ GetWindowLong
 DwmGetWindowAttribute
 EnumDisplayMonitors
 GetMonitorInfo
-MONITORINFOEXW
-GetDpiForMonitor
 OpenProcess
 QueryFullProcessImageName
 CloseHandle

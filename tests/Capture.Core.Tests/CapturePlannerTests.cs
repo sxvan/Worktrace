@@ -5,11 +5,11 @@ namespace Capture.Core.Tests;
 
 public class CapturePlannerTests
 {
-    // Primary 2560x1440 at 100%, a 4K monitor at 150% to the left (negative coordinates),
-    // and a 1920x1080 monitor at 125% above the primary.
-    private static readonly MonitorInfo Primary = new(1, 11, @"\\.\DISPLAY1", new RectInt(0, 0, 2560, 1440), 1.0, true);
-    private static readonly MonitorInfo Left = new(2, 22, @"\\.\DISPLAY2", new RectInt(-3840, -360, 0, 1800), 1.5, false);
-    private static readonly MonitorInfo Above = new(3, 33, @"\\.\DISPLAY3", new RectInt(320, -1080, 2240, 0), 1.25, false);
+    // Primary 2560x1440, a 4K monitor to the left (negative coordinates), and a 1920x1080
+    // monitor above the primary.
+    private static readonly MonitorInfo Primary = new(11, new RectInt(0, 0, 2560, 1440));
+    private static readonly MonitorInfo Left = new(22, new RectInt(-3840, -360, 0, 1800));
+    private static readonly MonitorInfo Above = new(33, new RectInt(320, -1080, 2240, 0));
     private static readonly MonitorInfo[] Monitors = [Primary, Left, Above];
 
     private static WindowInfo Capturable(long handle, RectInt bounds, int z) =>
@@ -35,9 +35,7 @@ public class CapturePlannerTests
 
         var placement = Assert.Single(CapturePlanner.Plan([window], Monitors).Windows);
 
-        Assert.Equal(Primary, placement.Monitor);
         Assert.Equal([window.Bounds], placement.VisibleRects);
-        Assert.Equal(1.0, placement.VisibleFraction);
     }
 
     [Fact]
@@ -49,7 +47,6 @@ public class CapturePlannerTests
         var placement = Assert.Single(CapturePlanner.Plan([cover, window], Monitors).Windows);
 
         Assert.Equal([new RectInt(0, 0, 500, 1000)], placement.VisibleRects);
-        Assert.Equal(0.5, placement.VisibleFraction);
     }
 
     [Fact]
@@ -105,25 +102,21 @@ public class CapturePlannerTests
 
         var placement = Assert.Single(CapturePlanner.Plan([cover, window], Monitors).Windows);
 
-        Assert.Equal(Left, placement.Monitor);
         Assert.Equal(2000L * 1000 - 1000 * 500, Area(placement));
         Assert.All(placement.VisibleRects, r => Assert.True(Left.Bounds.Contains(r)));
     }
 
     [Fact]
-    public void Window_spanning_two_monitors_with_different_scaling_is_one_window_with_both_parts()
+    public void Window_spanning_two_monitors_is_one_window_with_both_parts()
     {
-        // Straddles the border between the 150% monitor on the left and the 100% primary.
+        // Straddles the border between the monitor on the left and the primary.
         var window = Capturable(1, new RectInt(-600, 100, 400, 900), 0);
 
         var placement = Assert.Single(CapturePlanner.Plan([window], Monitors).Windows);
 
-        Assert.Equal(Left, placement.Monitor); // the larger part is on the left monitor
         Assert.Equal(
             new HashSet<RectInt> { new(-600, 100, 0, 900), new(0, 100, 400, 900) },
             placement.VisibleRects.ToHashSet());
-        Assert.Equal(1.0, placement.VisibleFraction);
-        Assert.Equal(window.Bounds, placement.VisibleBounds);
     }
 
     [Fact]
@@ -134,17 +127,6 @@ public class CapturePlannerTests
         var placement = Assert.Single(CapturePlanner.Plan([window], Monitors).Windows);
 
         Assert.Equal([new RectInt(2000, 1000, 2560, 1440)], placement.VisibleRects);
-    }
-
-    [Fact]
-    public void Windows_on_different_monitors_are_assigned_to_them()
-    {
-        var onPrimary = Capturable(1, new RectInt(0, 0, 500, 500), 0);
-        var onAbove = Capturable(2, new RectInt(400, -900, 1200, -100), 1);
-
-        var windows = CapturePlanner.Plan([onPrimary, onAbove], Monitors).Windows;
-
-        Assert.Equal([Primary, Above], windows.Select(w => w.Monitor));
     }
 
     // ---- Consistency check ----

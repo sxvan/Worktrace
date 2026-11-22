@@ -79,33 +79,22 @@ public static class DesktopInspector
         return result;
     }
 
-    /// <summary>All monitors: the primary is index 1, the others follow left to right, top to bottom.</summary>
+    /// <summary>All monitors, in the order Windows lists them.</summary>
     public static unsafe List<MonitorInfo> EnumerateMonitors()
     {
-        var found = new List<(HMONITOR Handle, string Device, RectInt Bounds, double Scale, bool Primary)>();
+        var found = new List<MonitorInfo>();
 
         PInvoke.EnumDisplayMonitors(default, (RECT*)null, (monitor, _, _, _) =>
         {
-            var info = new MONITORINFOEXW();
-            info.monitorInfo.cbSize = (uint)sizeof(MONITORINFOEXW);
-            if (PInvoke.GetMonitorInfo(monitor, (MONITORINFO*)&info))
+            var info = new MONITORINFO { cbSize = (uint)sizeof(MONITORINFO) };
+            if (PInvoke.GetMonitorInfo(monitor, &info))
             {
-                double scale = PInvoke.GetDpiForMonitor(monitor, MONITOR_DPI_TYPE.MDT_EFFECTIVE_DPI, out uint dpiX, out _).Succeeded
-                    ? dpiX / 96.0
-                    : 1.0;
-                const uint MONITORINFOF_PRIMARY = 1;
-                found.Add((monitor, info.szDevice.ToString(), ToRect(info.monitorInfo.rcMonitor), scale,
-                    (info.monitorInfo.dwFlags & MONITORINFOF_PRIMARY) != 0));
+                found.Add(new MonitorInfo((long)(nint)monitor, ToRect(info.rcMonitor)));
             }
             return true;
         }, default);
 
-        return found
-            .OrderByDescending(m => m.Primary)
-            .ThenBy(m => m.Bounds.Left)
-            .ThenBy(m => m.Bounds.Top)
-            .Select((m, i) => new MonitorInfo(i + 1, (long)(nint)m.Handle, m.Device, m.Bounds, m.Scale, m.Primary))
-            .ToList();
+        return found;
     }
 
     /// <summary>

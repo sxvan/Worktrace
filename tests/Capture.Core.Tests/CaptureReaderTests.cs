@@ -48,8 +48,7 @@ public sealed class CaptureReaderTests : IDisposable
     private static WindowPlacement Placement(long handle, string process, string title)
     {
         var bounds = new RectInt(0, 0, 100, 100);
-        var monitor = new MonitorInfo(0, 1, @"\\.\DISPLAY1", new RectInt(0, 0, 1920, 1080), 1.0, true);
-        return new WindowPlacement(new WindowInfo(handle, bounds, bounds, 0, true, false, process, title), [bounds], monitor);
+        return new WindowPlacement(new WindowInfo(handle, bounds, bounds, 0, true, false, process, title), [bounds]);
     }
 
     /// <summary>Stores one capture with a focused window; with a file, writes an encrypted image for it.</summary>
