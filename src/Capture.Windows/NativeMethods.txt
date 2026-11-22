@@ -22,8 +22,5 @@ GetDpiForMonitor
 OpenProcess
 QueryFullProcessImageName
 CloseHandle
-IUIAutomation
-CUIAutomation
-IUIAutomationElement
 GetClassName
 GetLayeredWindowAttributes

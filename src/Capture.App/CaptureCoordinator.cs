@@ -1,6 +1,5 @@
 using System.Diagnostics;
 using System.Threading.Channels;
-using Capture.Core.Rules;
 using Capture.Core.Monitoring;
 using Capture.Core.Pipeline;
 using Capture.Core.Triggers;
@@ -42,7 +41,6 @@ public sealed class CaptureCoordinator(
     CaptureDatabase database,
     ScreenCapturer capturer,
     CapturePipeline pipeline,
-    PasswordFieldDetector? passwordFields,
     TimeProvider time)
 {
     private bool _lastCaptureFoundNothing;
@@ -103,19 +101,6 @@ public sealed class CaptureCoordinator(
 
     private async Task CaptureAsync(CaptureDecision decision, CancellationToken shutdown)
     {
-        // Take no capture while a password is being typed into a captured application. Other
-        // applications are never captured anyway, so they are not queried.
-        if (passwordFields is not null && tracker.CurrentWindow?.Mode == WindowMode.Capture)
-        {
-            FocusCheck focus = await passwordFields.CheckFocusedElementAsync();
-            if (focus != FocusCheck.NotPassword)
-            {
-                string why = focus == FocusCheck.Password ? "password field has focus" : "could not check for a password field";
-                CaptureReporter.Skipped(decision, why);
-                return;
-            }
-        }
-
         var stopwatch = Stopwatch.StartNew();
         CaptureResult result = await capturer.CaptureAsync(decision.Timestamp, shutdown);
 

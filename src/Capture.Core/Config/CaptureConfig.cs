@@ -65,9 +65,6 @@ public sealed class CaptureConfig
     /// recognize, at the cost of ids some tools keep there.
     /// </summary>
     public bool StripUrlQueries { get; set; }
-
-    /// <summary>Take no capture while the focused element is a password field.</summary>
-    public bool SkipPasswordFields { get; set; } = true;
 }
 
 public sealed class WindowRule

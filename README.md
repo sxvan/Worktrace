@@ -44,10 +44,6 @@ Some things are never recorded, whatever the rules say:
 
 - Private browser windows (InPrivate, Incognito, Private Browsing).
 - The Windows shell (desktop, taskbar) and TimeCapture's own windows.
-- The screen while a password field has focus (`skipPasswordFields`, on by default). TimeCapture asks
-  Windows UI Automation whether the focused element is a password field. If the application does not
-  answer within half a second, no screenshot is taken either. Applications that do not describe
-  their controls to UI Automation (terminals, custom-drawn inputs) cannot be recognized this way.
 
 Screenshots are stored as lossless PNG files at full size, encrypted (`encryptImages`), and deleted
 after `retentionDays` days. Window titles and events are kept. A window that looks exactly as in
@@ -168,7 +164,6 @@ never captured and do not hide the windows below them.
 | `encryptImages` | true | Encrypt the screenshots on disk, see [Protection on disk](#protection-on-disk). |
 | `maxImageDimension` | 0 | Screenshots are scaled down so the longer side has at most this many pixels. 0 keeps the original size, which keeps small text readable. |
 | `stripUrlQueries` | false | Cut query strings and fragments off URLs in stored window titles, also where the secret check sees nothing. |
-| `skipPasswordFields` | true | Take no screenshot while a password field has focus. |
 
 ## Handing a day to Claude
 
@@ -243,7 +238,7 @@ Inside the storage root:
 | Path | Content |
 |---|---|
 | `src/Capture.Core` | Rules, capture triggers, redaction and image handling, independent of Windows |
-| `src/Capture.Windows` | Window inspection, screen capture, password field detection |
+| `src/Capture.Windows` | Window inspection and screen capture |
 | `src/Capture.Storage` | SQLite database, image files, retention |
 | `src/Capture.App` | The tray application |
 | `src/Capture.Cli` | `timecapture-cli`: daily export, on-demand text recognition and the review before sharing |

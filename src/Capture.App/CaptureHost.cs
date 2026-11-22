@@ -109,7 +109,6 @@ internal static class CaptureHost
             database,
             capturer,
             pipeline,
-            config.SkipPasswordFields ? new PasswordFieldDetector() : null,
             TimeProvider.System);
 
         using var shutdown = new CancellationTokenSource();

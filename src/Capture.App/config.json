@@ -14,8 +14,7 @@
   "storeImages": true,
   "encryptImages": true,
   "maxImageDimension": 0,
-  "stripUrlQueries": false,
-  "skipPasswordFields": true
+  "stripUrlQueries": false
 }
 
 
