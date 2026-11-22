@@ -11,6 +11,7 @@ internal sealed class ExportDayDialog : Form
     public ExportDayDialog(IReadOnlyList<DateOnly> days)
     {
         Text = "Export day";
+        Icon = Environment.ProcessPath is { } exe ? Icon.ExtractAssociatedIcon(exe) : null;
         FormBorderStyle = FormBorderStyle.FixedDialog;
         MaximizeBox = false;
         MinimizeBox = false;

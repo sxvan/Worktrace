@@ -8,6 +8,8 @@
     <AssemblyName>TimeCapture</AssemblyName>
     <RootNamespace>Capture.App</RootNamespace>
     <ApplicationManifest>app.manifest</ApplicationManifest>
+    <!-- Shown for the exe in Explorer, the Start with Windows entry and the app's windows. -->
+    <ApplicationIcon>TimeCapture.ico</ApplicationIcon>
     <!-- Per-monitor DPI awareness is declared in the manifest on purpose: it must hold before any code runs. -->
     <NoWarn>$(NoWarn);WFO0003</NoWarn>
 
