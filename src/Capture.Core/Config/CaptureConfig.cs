@@ -37,12 +37,11 @@ public sealed class CaptureConfig
     /// </summary>
     public List<WindowRule> Exclude { get; set; } = [];
 
-    /// <summary>Screenshots older than this many days are deleted (layer 3).</summary>
+    /// <summary>Screenshots older than this many days are deleted.</summary>
     public int RetentionDays { get; set; } = 14;
 
     /// <summary>
-    /// Save the screenshots themselves (layer 3). Off keeps window titles and recognized text only:
-    /// text the recognizer missed is then gone instead of visible in an image.
+    /// Save the screenshots themselves (layer 2). Off keeps window titles and timing only.
     /// </summary>
     public bool StoreImages { get; set; } = true;
 

@@ -66,7 +66,7 @@ public sealed class FileImageStore(string root, int maxDimension, DayKeyStore? k
     }
 
     /// <summary>
-    /// The image file as an image again (PNG, or AVIF from earlier versions), decrypted if it is
+    /// The image file as an image again (PNG), decrypted if it is
     /// encrypted, NOT redacted. Throws <see cref="CryptographicException"/> if the day's key is
     /// gone or the file was changed, moved or swapped. Works also when encryption of new images is
     /// off, as long as the keys are there.

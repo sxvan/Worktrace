@@ -133,9 +133,9 @@ public sealed class ImageEncryptionTests : IDisposable
     }
 
     [Fact]
-    public void Plain_files_from_earlier_versions_are_read_as_they_are()
+    public void Unencrypted_files_are_read_as_they_are()
     {
-        string path = PathFor(Day, "a.avif");
+        string path = PathFor(Day, "a.png");
         Directory.CreateDirectory(Path.GetDirectoryName(Path.Combine(_root, path))!);
         File.WriteAllBytes(Path.Combine(_root, path), Png);
 
