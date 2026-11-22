@@ -1,3 +1,6 @@
+using System.Text.Json;
+using System.Text.Json.Serialization;
+
 namespace Capture.Core.Config;
 
 /// <summary>All user-tunable settings. Serialized as config.json.</summary>
@@ -25,11 +28,21 @@ public sealed class CaptureConfig
     public int IdleTimeoutSeconds { get; set; } = 180;
 
     /// <summary>
-    /// What may be recorded, per application. Windows that match no rule are logged only as "other",
-    /// without process name or title, and are never captured. There are no built-in rules: until
-    /// config.json lists some, nothing is recorded.
+    /// What may be recorded. The strongest matching include rule grants its level; windows that match
+    /// none are logged only as "other", without process name or title, and are never captured. There
+    /// are no built-in rules: until config.json lists some, nothing is recorded.
     /// </summary>
-    public List<WindowRule> Rules { get; set; } = [];
+    public List<WindowRule> Include { get; set; } = [];
+
+    /// <summary>
+    /// What may never be recorded. A matching exclude rule takes its level and everything above it
+    /// away, whatever the include rules say.
+    /// </summary>
+    public List<WindowRule> Exclude { get; set; } = [];
+
+    /// <summary>The old single rule list. No longer read; only detected so the app can warn about it.</summary>
+    [JsonPropertyName("rules")]
+    public JsonElement? LegacyRules { get; set; }
 
     /// <summary>Screenshots older than this many days are deleted (layer 3).</summary>
     public int RetentionDays { get; set; } = 14;
@@ -62,31 +75,47 @@ public sealed class CaptureConfig
 
     /// <summary>Take no capture while the focused element is a password field.</summary>
     public bool SkipPasswordFields { get; set; } = true;
+
+    /// <summary>Problems with the rules that would otherwise go unnoticed, e.g. keys from the old rule format.</summary>
+    public IEnumerable<string> RuleWarnings()
+    {
+        if (LegacyRules is not null)
+        {
+            yield return "\"rules\" is no longer read; split it into \"include\" and \"exclude\".";
+        }
+        foreach (WindowRule rule in Include.Concat(Exclude))
+        {
+            foreach (string field in rule.UnknownFields?.Keys ?? Enumerable.Empty<string>())
+            {
+                yield return $"The rule for \"{rule.Process}\" has an unknown field \"{field}\"; it is ignored.";
+            }
+            string mode = rule.Mode?.Trim().ToLowerInvariant() ?? "";
+            if (mode is not ("" or "capture" or "logwithtitles" or "log"))
+            {
+                yield return $"The rule for \"{rule.Process}\" has an unknown mode \"{rule.Mode}\"; the rule is ignored.";
+            }
+        }
+    }
 }
 
 public sealed class WindowRule
 {
-    /// <summary>Executable name, e.g. "Code.exe". Case-insensitive; the ".exe" suffix is optional.</summary>
+    /// <summary>Executable name, e.g. "Code.exe", or "*" for every application. Case-insensitive; the ".exe" suffix is optional.</summary>
     public string Process { get; set; } = "";
 
     /// <summary>
-    /// "capture": log process and title, and take screenshots.
-    /// "log": log that the application is used, but never take screenshots.
+    /// A level, strongest first: "capture" (process, title and screenshots), "logWithTitles"
+    /// (process and title) or "log" (process only). An include rule grants the level, an exclude
+    /// rule takes it and everything above it away.
     /// </summary>
     public string Mode { get; set; } = "capture";
-
-    /// <summary>For "log" rules: also store the window title. Leave off for password managers, mail and the like.</summary>
-    public bool LogTitles { get; set; }
 
     /// <summary>
     /// Optional window title patterns with * and ? wildcards. If present, at least one must match the whole title.
     /// </summary>
     public List<string>? TitlePatterns { get; set; }
 
-    /// <summary>
-    /// Optional title patterns with * and ? wildcards for windows this rule does not cover, e.g.
-    /// "*YouTube*". A window whose whole title matches one is left to the other rules, as if this
-    /// rule did not exist; if none covers it, it is recorded as "other" only.
-    /// </summary>
-    public List<string>? ExcludeTitlePatterns { get; set; }
+    /// <summary>Old fields, no longer read; only detected so the app can warn about them.</summary>
+    [JsonExtensionData]
+    public Dictionary<string, JsonElement>? UnknownFields { get; set; }
 }

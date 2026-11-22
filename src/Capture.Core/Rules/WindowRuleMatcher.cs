@@ -6,10 +6,10 @@ namespace Capture.Core.Rules;
 /// <summary>What may be recorded about a window.</summary>
 public enum WindowMode
 {
-    /// <summary>No rule matches: nothing is recorded, not even the process name.</summary>
+    /// <summary>No include rule matches, or an exclude takes everything away: nothing is recorded, not even the process name.</summary>
     Other,
 
-    /// <summary>The process name (and the title, if the rule says so) is logged. Never captured.</summary>
+    /// <summary>The process name (and the title, if allowed) is logged. Never captured.</summary>
     Log,
 
     /// <summary>Process name and title are logged and the window is captured.</summary>
@@ -22,7 +22,11 @@ public readonly record struct WindowClassification(WindowMode Mode, bool LogTitl
     public static WindowClassification Other => new(WindowMode.Other, false);
 }
 
-/// <summary>Decides what may be recorded about a window. Anything without a matching rule is <see cref="WindowMode.Other"/>.</summary>
+/// <summary>
+/// Decides what may be recorded about a window. The strongest matching include rule grants a level;
+/// every matching exclude rule takes its level and everything above it away. Excludes always win, and
+/// a window without a matching include rule is <see cref="WindowMode.Other"/>.
+/// </summary>
 public sealed class WindowRuleMatcher
 {
     private static readonly string[] PrivateWindowMarkers =
@@ -32,64 +36,51 @@ public sealed class WindowRuleMatcher
 
     private static readonly TimeSpan MatchTimeout = TimeSpan.FromMilliseconds(100);
 
-    private sealed record Rule(WindowMode Mode, bool LogTitle, Regex[]? TitlePatterns, Regex[]? ExcludePatterns);
+    /// <summary>The levels a rule can name, weakest first.</summary>
+    private enum Level
+    {
+        Other,
+        Log,
+        LogWithTitles,
+        Capture,
+    }
 
-    /// <summary>A rule with this process name applies to every application that has no rule of its own.</summary>
+    private sealed record Rule(string Process, Level Level, Regex[]? TitlePatterns);
+
+    /// <summary>A rule with this process name applies to every application.</summary>
     public const string AnyProcess = "*";
 
-    // Keyed by process name without ".exe".
-    private readonly Dictionary<string, List<Rule>> _rules = new(StringComparer.OrdinalIgnoreCase);
-    private readonly List<Rule> _catchAll = [];
+    private readonly List<Rule> _include;
+    private readonly List<Rule> _exclude;
 
-    public WindowRuleMatcher(IEnumerable<WindowRule> rules)
+    public WindowRuleMatcher(IEnumerable<WindowRule> include, IEnumerable<WindowRule>? exclude = null)
     {
-        foreach (WindowRule rule in rules)
-        {
-            string process = NormalizeProcess(rule.Process);
-            WindowMode? mode = rule.Mode?.Trim().ToLowerInvariant() switch
-            {
-                null or "" or "capture" => WindowMode.Capture,
-                "log" => WindowMode.Log,
-                _ => null, // unknown mode: ignore the rule instead of guessing
-            };
-            if (process.Length == 0 || mode is null)
-            {
-                continue;
-            }
+        _include = Parse(include);
+        _exclude = Parse(exclude ?? []);
+    }
 
-            Regex[]? patterns = rule.TitlePatterns is { Count: > 0 }
-                ? rule.TitlePatterns.Select(ToRegex).ToArray()
-                : null;
-
-            Regex[]? excludes = rule.ExcludeTitlePatterns is { Count: > 0 }
-                ? rule.ExcludeTitlePatterns.Select(ToRegex).ToArray()
-                : null;
-
-            var parsed = new Rule(mode.Value, mode == WindowMode.Capture || rule.LogTitles, patterns, excludes);
-            if (process == AnyProcess)
-            {
-                _catchAll.Add(parsed);
-                continue;
-            }
-
-            if (!_rules.TryGetValue(process, out List<Rule>? list))
-            {
-                _rules[process] = list = [];
-            }
-            list.Add(parsed);
-        }
+    public WindowRuleMatcher(CaptureConfig config) : this(config.Include, config.Exclude)
+    {
     }
 
     /// <summary>
-    /// True if any rule names this process. Callers use this to avoid even reading the title of
-    /// windows that can never be recorded.
+    /// True if a window of this process can be recorded at all. Callers use this to avoid even reading
+    /// the title of windows that never can.
     /// </summary>
-    public bool HasRuleFor(string processName) => _catchAll.Count > 0 || _rules.ContainsKey(NormalizeProcess(processName));
+    public bool HasRuleFor(string processName)
+    {
+        string process = NormalizeProcess(processName);
+        if (!_include.Any(rule => AppliesTo(rule, process)))
+        {
+            return false;
+        }
+        // An exclude that takes everything away from every window of the process.
+        return !_exclude.Any(rule => rule.Level == Level.Log && rule.TitlePatterns is null && AppliesTo(rule, process));
+    }
 
     /// <summary>True if the window may be captured.</summary>
     public bool ShouldCapture(string processName, string? title) => Classify(processName, title).Mode == WindowMode.Capture;
 
-    /// <summary>The strongest matching rule wins: capture over log, and a rule that logs titles over one that does not.</summary>
     public WindowClassification Classify(string processName, string? title)
     {
         title ??= "";
@@ -98,30 +89,37 @@ public sealed class WindowRuleMatcher
             return WindowClassification.Other;
         }
 
-        // An application's own rules decide alone, so a "log" rule can exempt it from a catch-all
-        // "capture" rule. The catch-all skips untitled windows: those are helpers and overlays.
-        if (!_rules.TryGetValue(NormalizeProcess(processName), out List<Rule>? rules))
+        string process = NormalizeProcess(processName);
+        Level granted = Level.Other;
+        foreach (Rule rule in _include)
         {
-            if (_catchAll.Count == 0 || title.Length == 0)
+            // The catch-all skips untitled windows: those are helpers and overlays.
+            bool skip = rule.Process == AnyProcess && title.Length == 0;
+            if (rule.Level > granted && !skip && AppliesTo(rule, process) && Matches(rule, title, isExclude: false))
             {
-                return WindowClassification.Other;
+                granted = rule.Level;
             }
-            rules = _catchAll;
         }
 
-        WindowClassification best = WindowClassification.Other;
-        foreach (Rule rule in rules)
+        foreach (Rule rule in _exclude)
         {
-            if (!Matches(rule, title))
+            if (granted == Level.Other)
             {
-                continue;
+                break;
             }
-            if (rule.Mode > best.Mode || (rule.Mode == best.Mode && rule.LogTitle && !best.LogTitle))
+            if (rule.Level <= granted && AppliesTo(rule, process) && Matches(rule, title, isExclude: true))
             {
-                best = new WindowClassification(rule.Mode, rule.LogTitle);
+                granted = rule.Level - 1;
             }
         }
-        return best;
+
+        return granted switch
+        {
+            Level.Capture => new WindowClassification(WindowMode.Capture, true),
+            Level.LogWithTitles => new WindowClassification(WindowMode.Log, true),
+            Level.Log => new WindowClassification(WindowMode.Log, false),
+            _ => WindowClassification.Other,
+        };
     }
 
     /// <summary>Private browser windows are never recorded, regardless of rules.</summary>
@@ -137,28 +135,41 @@ public sealed class WindowRuleMatcher
         return false;
     }
 
-    /// <summary>The rule covers the window: a title pattern matches (or it has none), and no exclude pattern does.</summary>
-    private static bool Matches(Rule rule, string title)
+    private static List<Rule> Parse(IEnumerable<WindowRule> rules)
     {
-        if (rule.ExcludePatterns is not null)
+        var parsed = new List<Rule>();
+        foreach (WindowRule rule in rules)
         {
-            foreach (Regex exclude in rule.ExcludePatterns)
+            string process = NormalizeProcess(rule.Process);
+            Level? level = rule.Mode?.Trim().ToLowerInvariant() switch
             {
-                try
-                {
-                    if (exclude.IsMatch(title))
-                    {
-                        return false;
-                    }
-                }
-                catch (RegexMatchTimeoutException)
-                {
-                    // Fail closed: a window that may be excluded is excluded.
-                    return false;
-                }
+                null or "" or "capture" => Level.Capture,
+                "logwithtitles" => Level.LogWithTitles,
+                "log" => Level.Log,
+                _ => null, // unknown mode: ignore the rule instead of guessing
+            };
+            if (process.Length == 0 || level is null)
+            {
+                continue;
             }
-        }
 
+            Regex[]? patterns = rule.TitlePatterns is { Count: > 0 }
+                ? rule.TitlePatterns.Select(ToRegex).ToArray()
+                : null;
+            parsed.Add(new Rule(process, level.Value, patterns));
+        }
+        return parsed;
+    }
+
+    private static bool AppliesTo(Rule rule, string process) =>
+        rule.Process == AnyProcess || string.Equals(rule.Process, process, StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// The rule covers the title: a title pattern matches (or it has none). A pattern that times out
+    /// counts as a match for an exclude rule and as no match for an include rule: both fail closed.
+    /// </summary>
+    private static bool Matches(Rule rule, string title, bool isExclude)
+    {
         if (rule.TitlePatterns is null)
         {
             return true;
@@ -175,7 +186,10 @@ public sealed class WindowRuleMatcher
             }
             catch (RegexMatchTimeoutException)
             {
-                // Fail closed: an undecidable match is not a match.
+                if (isExclude)
+                {
+                    return true;
+                }
             }
         }
         return false;
