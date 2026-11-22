@@ -17,7 +17,7 @@ public class ActivityTrackerTests
     {
         var e = Assert.Single(Tracker().Process(new ForegroundChanged(T0, Editor)));
 
-        Assert.Equal(new ActivityEvent(T0, EventType.Foreground, "Code.exe", "a.cs", 100), e);
+        Assert.Equal(new ActivityEvent(T0, EventType.Foreground, "Code.exe", "a.cs"), e);
     }
 
     [Fact]
@@ -158,7 +158,7 @@ public class ActivityTrackerTests
     {
         var e = Assert.Single(Tracker().Process(new ForegroundChanged(T0, WindowSnapshot.Logged(7, "keepass.exe", null))));
 
-        Assert.Equal(new ActivityEvent(T0, EventType.Foreground, "keepass.exe", null, 7), e);
+        Assert.Equal(new ActivityEvent(T0, EventType.Foreground, "keepass.exe", null), e);
     }
 
     [Fact]
@@ -169,7 +169,7 @@ public class ActivityTrackerTests
 
         var e = Assert.Single(tracker.Process(new TitleChanged(At(3), WindowSnapshot.Logged(7, "msedge.exe", "Mail"))));
 
-        Assert.Equal(new ActivityEvent(At(3), EventType.TitleChange, "msedge.exe", "Mail", 7), e);
+        Assert.Equal(new ActivityEvent(At(3), EventType.TitleChange, "msedge.exe", "Mail"), e);
     }
 
     // ---- Pause ----

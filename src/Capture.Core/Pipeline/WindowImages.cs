@@ -52,11 +52,10 @@ public enum CaptureOutcome
 public sealed record CaptureResult(
     CaptureOutcome Outcome,
     IReadOnlyList<RawWindowImage> Images,
-    IReadOnlyList<MonitorInfo> Monitors,
     long? FocusedWindowHandle = null,
     string? Reason = null)
 {
-    public static CaptureResult NoCapturableWindow { get; } = new(CaptureOutcome.NoCapturableWindow, [], []);
+    public static CaptureResult NoCapturableWindow { get; } = new(CaptureOutcome.NoCapturableWindow, []);
 
-    public static CaptureResult Discarded(string reason) => new(CaptureOutcome.Discarded, [], [], Reason: reason);
+    public static CaptureResult Discarded(string reason) => new(CaptureOutcome.Discarded, [], Reason: reason);
 }

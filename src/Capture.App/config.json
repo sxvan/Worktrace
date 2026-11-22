@@ -13,7 +13,6 @@
   "retentionDays": 14,
   "storeImages": true,
   "encryptImages": true,
-  "maxImageDimension": 0,
   "stripUrlQueries": false
 }
 

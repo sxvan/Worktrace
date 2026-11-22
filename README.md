@@ -50,7 +50,7 @@ after `retentionDays` days. Window titles and events are kept. A window that loo
 its last stored screenshot is not stored again: same title, and no visible change when the two are
 compared pixel by pixel at full size (a blinking text cursor does not count).
 
-Databases created by versions before 1.0.0 (which stored recognized text) are not migrated: the app
+Databases created by earlier versions are not migrated: the app
 refuses to start with one. Delete `capture.db` (and `capture.db-wal`, `capture.db-shm`) in the
 storage root.
 
@@ -162,7 +162,6 @@ never captured and do not hide the windows below them.
 | `retentionDays` | 14 | Screenshots older than this are deleted. |
 | `storeImages` | true | Keep the screenshots (layer 2). Off keeps titles and timing only. |
 | `encryptImages` | true | Encrypt the screenshots on disk, see [Protection on disk](#protection-on-disk). |
-| `maxImageDimension` | 0 | Screenshots are scaled down so the longer side has at most this many pixels. 0 keeps the original size, which keeps small text readable. |
 | `stripUrlQueries` | false | Cut query strings and fragments off URLs in stored window titles, also where the secret check sees nothing. |
 
 ## Handing a day to Claude

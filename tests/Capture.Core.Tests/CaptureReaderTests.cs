@@ -59,16 +59,16 @@ public sealed class CaptureReaderTests : IDisposable
         if (fileName is not null)
         {
             path = Path.Combine("captures", Day.ToString("yyyy-MM-dd"), fileName);
-            new FileImageStore(_root, 0, new DayKeyStore(_database, _protector)).Write(path, Day, (byte[])Png.Clone());
+            new FileImageStore(_root, new DayKeyStore(_database, _protector)).Write(path, Day, (byte[])Png.Clone());
         }
-        return _database.InsertCapture(T0.AddMinutes(minute), TriggerType.Fallback, focused ? 7 : null,
-            [new CapturedWindowRecord(Placement(7, "Code.exe", title), focused, 100, 100, 0, path, dedupeOf)])[0];
+        return _database.InsertCapture(T0.AddMinutes(minute), TriggerType.Fallback,
+            [new CapturedWindowRecord(Placement(7, "Code.exe", title), focused, path, dedupeOf)])[0];
     }
 
     [Fact]
     public void Events_and_screenshots_are_read_back()
     {
-        _database.InsertEvent(new ActivityEvent(T0, EventType.Foreground, "Code.exe", "Program.cs", 7));
+        _database.InsertEvent(new ActivityEvent(T0, EventType.Foreground, "Code.exe", "Program.cs"));
         _database.InsertEvent(new ActivityEvent(T0.AddMinutes(5), EventType.IdleStart));
         long first = Capture(1, "a.png.enc");
         Capture(2, null, dedupeOf: first);

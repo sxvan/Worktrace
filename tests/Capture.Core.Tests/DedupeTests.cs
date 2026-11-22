@@ -23,53 +23,6 @@ public class DedupeTests
         return pixels;
     }
 
-    [Fact]
-    public void Identical_images_have_the_same_hash()
-    {
-        byte[] a = Image(640, 480, (x, y) => (byte)((x * 7 + y * 13) % 256));
-        byte[] b = (byte[])a.Clone();
-
-        Assert.Equal(DHash.Compute(a, 640, 480), DHash.Compute(b, 640, 480));
-    }
-
-    [Fact]
-    public void Horizontal_gradients_in_opposite_directions_differ_in_every_bit()
-    {
-        ulong darkToLight = DHash.Compute(Image(900, 800, (x, _) => (byte)(x * 255 / 899)), 900, 800);
-        ulong lightToDark = DHash.Compute(Image(900, 800, (x, _) => (byte)(255 - x * 255 / 899)), 900, 800);
-
-        Assert.Equal(0UL, darkToLight);
-        Assert.Equal(ulong.MaxValue, lightToDark);
-        Assert.Equal(64, DHash.HammingDistance(darkToLight, lightToDark));
-    }
-
-    [Fact]
-    public void A_large_change_moves_the_hash_far_and_a_tiny_one_does_not()
-    {
-        Func<int, int, byte> pattern = (x, y) => (byte)(((x / 100) * 37 + (y / 100) * 91) % 256);
-        ulong original = DHash.Compute(Image(900, 800, pattern), 900, 800);
-
-        // One changed pixel.
-        ulong tiny = DHash.Compute(Image(900, 800, (x, y) => x == 5 && y == 5 ? (byte)255 : pattern(x, y)), 900, 800);
-        // Left half replaced by a different pattern.
-        ulong large = DHash.Compute(Image(900, 800, (x, y) => x < 450 ? (byte)((x / 50 * 53) % 256) : pattern(x, y)), 900, 800);
-
-        Assert.Equal(0, DHash.HammingDistance(original, tiny));
-        Assert.True(DHash.HammingDistance(original, large) > 4);
-    }
-
-    [Fact]
-    public void Works_for_images_smaller_than_the_hash_grid()
-    {
-        DHash.Compute(Image(3, 2, (x, y) => (byte)(x + y)), 3, 2);
-    }
-
-    [Fact]
-    public void Wrong_buffer_size_is_rejected()
-    {
-        Assert.Throws<ArgumentException>(() => DHash.Compute(new byte[10], 4, 4));
-    }
-
     // ---- Deduplicator: full-resolution comparison ----
 
     private const int W = 200, H = 100;
@@ -105,8 +58,6 @@ public class DedupeTests
         // A 12x6 block of new "text" in an empty area: far too small for a coarse hash.
         byte[] typed = Page((x, y) => x >= 160 && x < 172 && y >= 90 && y < 96);
 
-        // The old check (dHash distance up to 4) called this a duplicate.
-        Assert.True(DHash.HammingDistance(DHash.Compute(Page(), W, H), DHash.Compute(typed, W, H)) <= 4);
         Assert.Null(WithSaved(Page()).FindDuplicate(1, "t", W, H, Gray(typed), Today));
     }
 

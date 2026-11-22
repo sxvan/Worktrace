@@ -40,7 +40,7 @@ public sealed class ImageEncryptionTests : IDisposable
         public byte[] Unprotect(byte[] wrapped) => wrapped[..^1].Select(b => (byte)(b ^ 0x5A)).ToArray();
     }
 
-    private FileImageStore Store() => new(_root, 0, new DayKeyStore(_database, new XorProtector()));
+    private FileImageStore Store() => new(_root, new DayKeyStore(_database, new XorProtector()));
 
     private static string PathFor(DateOnly day, string name) => Path.Combine("captures", day.ToString("yyyy-MM-dd"), name);
 
@@ -140,7 +140,6 @@ public sealed class ImageEncryptionTests : IDisposable
         File.WriteAllBytes(Path.Combine(_root, path), Png);
 
         Assert.Equal(Png, Store().ReadUnredacted(path));
-        Assert.Equal(Png, new FileImageStore(_root, 0).ReadUnredacted(path));
     }
 
     [Fact]

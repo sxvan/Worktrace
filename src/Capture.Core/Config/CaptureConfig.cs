@@ -52,13 +52,6 @@ public sealed class CaptureConfig
     public bool EncryptImages { get; set; } = true;
 
     /// <summary>
-    /// Saved images (lossless PNG) are scaled down so their longer side is at most this many
-    /// pixels. 0, the default, keeps the original size: scaled-down screen text soon becomes
-    /// unreadable for text recognition.
-    /// </summary>
-    public int MaxImageDimension { get; set; }
-
-    /// <summary>
     /// Cut the query string and fragment off URLs in stored window titles. The secret check
     /// already replaces values that look like secrets; this also drops the ones it does not
     /// recognize, at the cost of ids some tools keep there.

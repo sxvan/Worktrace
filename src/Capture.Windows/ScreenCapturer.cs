@@ -143,7 +143,7 @@ public sealed class ScreenCapturer
             long? focused = before.Windows.Any(p => p.Window.Handle == foreground) ? foreground : null;
 
             success = true;
-            return new CaptureResult(CaptureOutcome.Captured, images, before.Monitors, focused);
+            return new CaptureResult(CaptureOutcome.Captured, images, focused);
         }
         finally
         {

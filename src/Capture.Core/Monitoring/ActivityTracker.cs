@@ -149,7 +149,7 @@ public sealed class ActivityTracker(TimeSpan idleTimeout)
         _lastLogged = window;
 
         events.Add(window.Mode != WindowMode.Other
-            ? new ActivityEvent(timestamp, typeIfRecorded, window.ProcessName, window.Title, window.Handle)
+            ? new ActivityEvent(timestamp, typeIfRecorded, window.ProcessName, window.Title)
             : new ActivityEvent(timestamp, EventType.Other));
     }
 }

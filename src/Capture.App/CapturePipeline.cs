@@ -133,30 +133,27 @@ public sealed class CapturePipeline : IDisposable
                 int width = raw.Width, height = raw.Height;
 
                 // Dedupe first: an unchanged window is not saved again. It is compared with the last
-                // saved image of the window at full resolution; the 64-bit hash only goes to the database.
-                ulong hash = DHash.Compute(raw.Pixels, width, height);
+                // saved image of the window at full resolution.
                 byte[] gray = Deduplicator.Grayscale(raw.Pixels, width, height);
                 long? duplicateOf = _deduplicator.FindDuplicate(handle, raw.Placement.Window.Title, width, height, gray, day);
                 if (duplicateOf is not null)
                 {
                     Array.Clear(gray);
-                    records.Add(new CapturedWindowRecord(raw.Placement, focused, width, height, hash, null, duplicateOf));
+                    records.Add(new CapturedWindowRecord(raw.Placement, focused, null, duplicateOf));
                     windowSizes.Add((width, height));
                     grays.Add(null);
                     continue;
                 }
                 grays.Add(gray);
 
-                SavedImage? saved = null;
+                string? savedPath = null;
                 if (_storeImages)
                 {
-                    saved = _imageStore.Save(raw, sequence);
-                    writtenFiles.Add(saved.RelativePath);
+                    savedPath = _imageStore.Save(raw, sequence);
+                    writtenFiles.Add(savedPath);
                 }
 
-                // Width and height describe the saved file, which can be scaled down.
-                records.Add(new CapturedWindowRecord(
-                    raw.Placement, focused, saved?.Width ?? width, saved?.Height ?? height, hash, saved?.RelativePath, null));
+                records.Add(new CapturedWindowRecord(raw.Placement, focused, savedPath, null));
                 windowSizes.Add((width, height));
             }
 
@@ -166,7 +163,7 @@ public sealed class CapturePipeline : IDisposable
             }
 
             IReadOnlyList<long> ids = _database.InsertCapture(
-                job.Decision.Timestamp, job.Decision.Trigger, job.Capture.FocusedWindowHandle, records);
+                job.Decision.Timestamp, job.Decision.Trigger, records);
 
             for (int i = 0; i < records.Count; i++)
             {
