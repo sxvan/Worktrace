@@ -93,8 +93,9 @@ dotnet publish src/Capture.App -c Release
 
 TimeCapture appears as an icon in the notification area. Its icon and menu show the current state
 (capturing, idle, paused, not capturing). The menu lets you pause for 15 minutes, for an hour or until
-resumed, export a day's screenshots (**Export day…**), open the config file, and turn "Start with
-Windows" on or off. Started from a terminal, it also prints what it does there.
+resumed, delete the captures of the last few minutes (**Delete last 5 minutes…**, see
+`deleteRecentMinutes`), export a day's screenshots (**Export day…**), open the config file, and turn
+"Start with Windows" on or off. Started from a terminal, it also prints what it does there.
 
 ## Configuration
 
@@ -163,6 +164,8 @@ never captured and do not hide the windows below them.
 | `storeImages` | true | Keep the screenshots (layer 2). Off keeps titles and timing only. |
 | `encryptImages` | true | Encrypt the screenshots on disk, see [Protection on disk](#protection-on-disk). |
 | `stripUrlQueries` | false | Cut query strings and fragments off URLs in stored window titles, also where the secret check sees nothing. |
+| `deleteRecentMinutes` | 5 | How far back **Delete last minutes…** in the tray menu reaches. |
+| `deleteRecentMode` | `capture` | What **Delete last minutes…** takes away, read like an exclude rule's `mode`: `capture` deletes the screenshots (the captures with their window titles), `logWithTitles` also removes the window titles from the activity events, `log` deletes the events too. |
 
 ## Handing a day to Claude
 

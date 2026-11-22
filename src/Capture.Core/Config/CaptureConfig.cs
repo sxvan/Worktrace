@@ -57,6 +57,16 @@ public sealed class CaptureConfig
     /// recognize, at the cost of ids some tools keep there.
     /// </summary>
     public bool StripUrlQueries { get; set; }
+
+    /// <summary>How far back the tray menu's "Delete last minutes" reaches.</summary>
+    public int DeleteRecentMinutes { get; set; } = 5;
+
+    /// <summary>
+    /// What "Delete last minutes" takes away, with the levels and meaning of an exclude rule's mode:
+    /// "capture" deletes the captures (screenshots and their window titles), "logWithTitles" also
+    /// removes the window titles from the activity events, "log" deletes the events as well.
+    /// </summary>
+    public string DeleteRecentMode { get; set; } = "capture";
 }
 
 public sealed class WindowRule

@@ -172,6 +172,80 @@ public sealed class CaptureDatabase : IDisposable
     }
 
     /// <summary>
+    /// Deletes every capture taken at or after <paramref name="since"/>, with its windows, in one
+    /// transaction. Returns the relative paths of the image files those windows had, for the caller
+    /// to delete.
+    /// </summary>
+    public IReadOnlyList<string> DeleteCapturesSince(DateTimeOffset since)
+    {
+        lock (_lock)
+        {
+            using SqliteTransaction transaction = _connection.BeginTransaction();
+            string sinceText = Format(since);
+
+            var files = new List<string>();
+            using (SqliteCommand select = _connection.CreateCommand())
+            {
+                select.Transaction = transaction;
+                select.CommandText = """
+                    SELECT w.file_path FROM capture_windows w JOIN captures c ON c.id = w.capture_id
+                    WHERE c.timestamp >= $since AND w.file_path IS NOT NULL;
+                    """;
+                select.Parameters.AddWithValue("$since", sinceText);
+                using SqliteDataReader reader = select.ExecuteReader();
+                while (reader.Read())
+                {
+                    files.Add(reader.GetString(0));
+                }
+            }
+
+            using (SqliteCommand delete = _connection.CreateCommand())
+            {
+                delete.Transaction = transaction;
+                // A kept window can only point at an earlier image; should the clock have gone
+                // backwards, it loses the reference rather than blocking the delete.
+                delete.CommandText = """
+                    UPDATE capture_windows SET dedupe_ref_id = NULL
+                    WHERE capture_id IN (SELECT id FROM captures WHERE timestamp < $since)
+                      AND dedupe_ref_id IN (SELECT w.id FROM capture_windows w JOIN captures c ON c.id = w.capture_id
+                                            WHERE c.timestamp >= $since);
+                    DELETE FROM capture_windows WHERE capture_id IN (SELECT id FROM captures WHERE timestamp >= $since);
+                    DELETE FROM captures WHERE timestamp >= $since;
+                    """;
+                delete.Parameters.AddWithValue("$since", sinceText);
+                delete.ExecuteNonQuery();
+            }
+
+            transaction.Commit();
+            return files;
+        }
+    }
+
+    /// <summary>Deletes every activity event at or after <paramref name="since"/>. Returns the number deleted.</summary>
+    public int DeleteEventsSince(DateTimeOffset since)
+    {
+        lock (_lock)
+        {
+            using SqliteCommand command = _connection.CreateCommand();
+            command.CommandText = "DELETE FROM events WHERE timestamp >= $since;";
+            command.Parameters.AddWithValue("$since", Format(since));
+            return command.ExecuteNonQuery();
+        }
+    }
+
+    /// <summary>Removes the window title of every activity event at or after <paramref name="since"/>. Returns the number changed.</summary>
+    public int ClearEventTitlesSince(DateTimeOffset since)
+    {
+        lock (_lock)
+        {
+            using SqliteCommand command = _connection.CreateCommand();
+            command.CommandText = "UPDATE events SET window_title = NULL WHERE timestamp >= $since AND window_title IS NOT NULL;";
+            command.Parameters.AddWithValue("$since", Format(since));
+            return command.ExecuteNonQuery();
+        }
+    }
+
+    /// <summary>
     /// Forgets the image files of all day folders before <paramref name="firstDayToKeep"/>:
     /// rows stay, their file path becomes null. Returns the number of rows changed.
     /// </summary>

@@ -3,6 +3,8 @@ using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.Runtime.InteropServices;
 using System.Windows.Forms;
+using Capture.Core.Config;
+using Capture.Core.Rules;
 using Capture.Storage;
 using Serilog;
 
@@ -15,6 +17,8 @@ namespace Capture.App;
 public sealed class TrayApplication : ApplicationContext
 {
     private readonly CaptureCoordinator _coordinator;
+    private readonly CapturePipeline _pipeline;
+    private readonly CaptureConfig _config;
     private readonly AppPaths _paths;
     private readonly FileImageStore _images;
     private readonly NotifyIcon _notifyIcon;
@@ -24,9 +28,12 @@ public sealed class TrayApplication : ApplicationContext
     private readonly ToolStripMenuItem _resumeItem;
     private readonly ToolStripMenuItem _autostartItem;
 
-    public TrayApplication(CaptureCoordinator coordinator, AppPaths paths, FileImageStore images)
+    public TrayApplication(
+        CaptureCoordinator coordinator, CapturePipeline pipeline, CaptureConfig config, AppPaths paths, FileImageStore images)
     {
         _coordinator = coordinator;
+        _pipeline = pipeline;
+        _config = config;
         _paths = paths;
         _images = images;
         _marshal.CreateControl(); // gives the UI thread a handle to marshal onto
@@ -51,6 +58,7 @@ public sealed class TrayApplication : ApplicationContext
         menu.Items.Add("Pause until resumed", null, (_, _) => _coordinator.Pause(null));
         menu.Items.Add(_resumeItem);
         menu.Items.Add(new ToolStripSeparator());
+        menu.Items.Add($"Delete last {DeleteRecentMinutes} minutes…", null, (_, _) => DeleteRecent());
         // The screenshots are encrypted, so the folder itself is no use to look at: export a day instead.
         menu.Items.Add("Export day…", null, (_, _) => ExportDay());
         menu.Items.Add("Open config file", null, (_, _) => Open(_paths.ConfigFile));
@@ -121,6 +129,43 @@ public sealed class TrayApplication : ApplicationContext
         catch (Exception)
         {
             return false;
+        }
+    }
+
+    private int DeleteRecentMinutes => Math.Max(1, _config.DeleteRecentMinutes);
+
+    /// <summary>After asking, deletes what deleteRecentMode names from the last few minutes.</summary>
+    private void DeleteRecent()
+    {
+        int minutes = DeleteRecentMinutes;
+        if (WindowRuleMatcher.ParseMode(_config.DeleteRecentMode) is not RuleLevel level)
+        {
+            MessageBox.Show($"deleteRecentMode \"{_config.DeleteRecentMode}\" in the config is not one of capture, logWithTitles or log.",
+                "TimeCapture", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return;
+        }
+        string what = level switch
+        {
+            RuleLevel.Capture => "screenshots",
+            RuleLevel.LogWithTitles => "screenshots and window titles",
+            _ => "screenshots and all activity",
+        };
+        if (MessageBox.Show($"Delete the {what} of the last {minutes} minutes? This cannot be undone.",
+                "TimeCapture", MessageBoxButtons.OKCancel, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2) != DialogResult.OK)
+        {
+            return;
+        }
+
+        try
+        {
+            DateTimeOffset now = DateTimeOffset.UtcNow;
+            int files = _pipeline.DeleteRecent(now.AddMinutes(-minutes), now, level);
+            Log.Information("Deleted the last {Minutes} minutes ({Level}): {Files} image file(s)", minutes, level, files);
+        }
+        catch (Exception ex)
+        {
+            Log.Error("Deleting recent captures failed: {ErrorType} 0x{HResult:X8}", ex.GetType().Name, ex.HResult);
+            MessageBox.Show("Deleting failed. See the log for details.", "TimeCapture", MessageBoxButtons.OK, MessageBoxIcon.Warning);
         }
     }
 

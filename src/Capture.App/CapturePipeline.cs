@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
 using Capture.Core.Pipeline;
+using Capture.Core.Rules;
 using Capture.Core.Triggers;
 using Capture.Storage;
 
@@ -29,6 +30,13 @@ public sealed class CapturePipeline : IDisposable
     private readonly bool _storeImages;
     private readonly BlockingCollection<Job> _queue = new(MaxQueuedCaptures);
     private readonly Thread _thread;
+
+    // Held while a capture is processed and while recent captures are deleted, so a delete never
+    // races a capture that is half stored.
+    private readonly Lock _processing = new();
+
+    // Captures taken before this were deleted while they still sat in the queue: drop them.
+    private DateTimeOffset _discardBefore = DateTimeOffset.MinValue;
 
     public CapturePipeline(IImageStore imageStore, CaptureDatabase database, bool storeImages)
     {
@@ -85,7 +93,17 @@ public sealed class CapturePipeline : IDisposable
             {
                 try
                 {
-                    Process(job);
+                    lock (_processing)
+                    {
+                        if (job.Decision.Timestamp < _discardBefore)
+                        {
+                            CaptureReporter.Discarded(job.Decision, "deleted by the user");
+                        }
+                        else
+                        {
+                            Process(job);
+                        }
+                    }
                 }
                 catch (Exception ex)
                 {
@@ -109,6 +127,47 @@ public sealed class CapturePipeline : IDisposable
         catch (ObjectDisposedException)
         {
             // Queue disposed during shutdown.
+        }
+    }
+
+    /// <summary>
+    /// Deletes everything captured from <paramref name="since"/> up to <paramref name="now"/>: the
+    /// database rows, their image files, and captures still waiting in the queue. Like an exclude
+    /// rule, <paramref name="level"/> also takes everything above it away from the activity events of
+    /// that span: <see cref="RuleLevel.LogWithTitles"/> their window titles, <see cref="RuleLevel.Log"/>
+    /// the events themselves. Safe to call from any thread. Returns the number of image files deleted.
+    /// </summary>
+    public int DeleteRecent(DateTimeOffset since, DateTimeOffset now, RuleLevel level)
+    {
+        lock (_processing)
+        {
+            _discardBefore = now;
+            IReadOnlyList<string> files = _database.DeleteCapturesSince(since);
+            // The remembered images may be among the deleted ones; a later duplicate must not point at them.
+            _deduplicator.Clear();
+            if (level <= RuleLevel.Log)
+            {
+                _database.DeleteEventsSince(since);
+            }
+            else if (level == RuleLevel.LogWithTitles)
+            {
+                _database.ClearEventTitlesSince(since);
+            }
+
+            int deleted = 0;
+            foreach (string path in files)
+            {
+                try
+                {
+                    _imageStore.Delete(path);
+                    deleted++;
+                }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+                {
+                    // Without its row the file is unreachable; retention removes the day folder eventually.
+                }
+            }
+            return deleted;
         }
     }
 
