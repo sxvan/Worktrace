@@ -37,12 +37,11 @@ public sealed class CaptureConfig
     /// </summary>
     public List<WindowRule> Exclude { get; set; } = [];
 
-    /// <summary>Screenshots older than this many days are deleted (layer 3).</summary>
+    /// <summary>Screenshots older than this many days are deleted.</summary>
     public int RetentionDays { get; set; } = 14;
 
     /// <summary>
-    /// Save the screenshots themselves (layer 3). Off keeps window titles and recognized text only:
-    /// text the recognizer missed is then gone instead of visible in an image.
+    /// Save the screenshots themselves (layer 2). Off keeps window titles and timing only.
     /// </summary>
     public bool StoreImages { get; set; } = true;
 
@@ -53,21 +52,11 @@ public sealed class CaptureConfig
     public bool EncryptImages { get; set; } = true;
 
     /// <summary>
-    /// Saved images (lossless PNG) are scaled down so their longer side is at most this many
-    /// pixels. 0, the default, keeps the original size: scaled-down screen text soon becomes
-    /// unreadable for text recognition.
-    /// </summary>
-    public int MaxImageDimension { get; set; }
-
-    /// <summary>
     /// Cut the query string and fragment off URLs in stored window titles. The secret check
     /// already replaces values that look like secrets; this also drops the ones it does not
     /// recognize, at the cost of ids some tools keep there.
     /// </summary>
     public bool StripUrlQueries { get; set; }
-
-    /// <summary>Take no capture while the focused element is a password field.</summary>
-    public bool SkipPasswordFields { get; set; } = true;
 }
 
 public sealed class WindowRule

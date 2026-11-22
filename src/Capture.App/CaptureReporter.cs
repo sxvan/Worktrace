@@ -21,12 +21,6 @@ internal static class CaptureReporter
         Console.WriteLine($"{e.Timestamp.ToLocalTime():HH:mm:ss}  {e.Type.ToDbName(),-12}  {e.ProcessName}");
     }
 
-    public static void Skipped(CaptureDecision decision, string reason)
-    {
-        Log.Information("Capture ({Trigger}) skipped: {Reason}", decision.Trigger.ToDbName(), reason);
-        Console.WriteLine($"{Prefix(decision)} -> skipped ({reason})");
-    }
-
     public static void NothingToCapture(CaptureDecision decision)
     {
         Log.Information("Capture ({Trigger}): no capturable window visible", decision.Trigger.ToDbName());

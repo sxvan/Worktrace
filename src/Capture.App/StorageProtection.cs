@@ -56,7 +56,7 @@ internal static class StorageProtection
         if (SyncProvider(root) is string provider)
         {
             warnings.Add($"The storage root {root} is inside a folder synced by {provider}. "
-                         + "Screenshots are encrypted, but the database (window titles, recognized text) is not: "
+                         + "Screenshots are encrypted, but the database (window titles) is not: "
                          + "it is copied to the cloud. Set storageRoot to a folder outside it.");
         }
         return warnings;

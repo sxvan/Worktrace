@@ -93,7 +93,7 @@ internal static class CaptureHost
 
         // The keys are always available for reading; encryptImages decides whether new images are encrypted.
         var imageStore = new FileImageStore(
-            paths.Root, config.MaxImageDimension, new DayKeyStore(database, new DpapiKeyProtector()), config.EncryptImages);
+            paths.Root, new DayKeyStore(database, new DpapiKeyProtector()), config.EncryptImages);
         if (!config.EncryptImages)
         {
             Log.Warning("Image encryption is switched off in the config");
@@ -109,7 +109,6 @@ internal static class CaptureHost
             database,
             capturer,
             pipeline,
-            config.SkipPasswordFields ? new PasswordFieldDetector() : null,
             TimeProvider.System);
 
         using var shutdown = new CancellationTokenSource();

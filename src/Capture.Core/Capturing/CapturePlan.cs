@@ -20,23 +20,12 @@ public sealed record WindowInfo(
     string? ProcessName,
     string? Title);
 
-/// <param name="Index">1-based: the primary monitor is 1, the others follow left to right, top to bottom.</param>
-/// <param name="Scale">Display scaling, 1.0 = 100%.</param>
-public sealed record MonitorInfo(int Index, long Handle, string DeviceName, RectInt Bounds, double Scale, bool IsPrimary);
+/// <param name="Bounds">The monitor's area in virtual-screen coordinates.</param>
+public sealed record MonitorInfo(long Handle, RectInt Bounds);
 
 /// <summary>An capturable window and the parts of it that are actually visible on screen.</summary>
 /// <param name="VisibleRects">Non-overlapping rectangles in virtual-screen coordinates.</param>
-/// <param name="Monitor">The monitor showing the largest visible part of the window.</param>
-public sealed record WindowPlacement(WindowInfo Window, IReadOnlyList<RectInt> VisibleRects, MonitorInfo Monitor)
-{
-    public RectInt VisibleBounds => new(
-        VisibleRects.Min(r => r.Left), VisibleRects.Min(r => r.Top),
-        VisibleRects.Max(r => r.Right), VisibleRects.Max(r => r.Bottom));
-
-    /// <summary>Share of the window's area that is visible, 0 to 1.</summary>
-    public double VisibleFraction =>
-        VisibleRects.Sum(r => (double)r.Width * r.Height) / ((double)Window.Bounds.Width * Window.Bounds.Height);
-}
+public sealed record WindowPlacement(WindowInfo Window, IReadOnlyList<RectInt> VisibleRects);
 
 /// <summary>What one capture has to record: the capturable windows that are visible, topmost first.</summary>
 public sealed class CapturePlan(IReadOnlyList<MonitorInfo> monitors, IReadOnlyList<WindowPlacement> windows)
@@ -105,24 +94,15 @@ public static class CapturePlanner
 
             var covers = windows.Take(i).Where(above => above.IsCovering).Select(above => above.Bounds).ToList();
             var visible = new List<RectInt>();
-            MonitorInfo? mainMonitor = null;
-            long mainArea = 0;
-
             foreach (MonitorInfo monitor in monitors)
             {
-                List<RectInt> onMonitor = Region.Subtract(window.Bounds.Intersect(monitor.Bounds), covers);
-                long area = onMonitor.Sum(r => (long)r.Width * r.Height);
-                if (area > mainArea)
-                {
-                    mainArea = area;
-                    mainMonitor = monitor;
-                }
-                visible.AddRange(onMonitor);
+                visible.AddRange(Region.Subtract(window.Bounds.Intersect(monitor.Bounds), covers));
             }
 
-            if (mainMonitor is not null)
+            // A window hidden completely, or off every monitor, has nothing to capture.
+            if (visible.Any(r => !r.IsEmpty))
             {
-                placements.Add(new WindowPlacement(window, visible, mainMonitor));
+                placements.Add(new WindowPlacement(window, visible));
             }
         }
 

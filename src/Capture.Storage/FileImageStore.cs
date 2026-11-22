@@ -14,8 +14,8 @@ namespace Capture.Storage;
 /// second redaction pass, a model): scaling down or lossy compression blurs small text until
 /// characters can no longer be told apart. PNG is read by every tool and accepted by model APIs.
 ///
-/// With a <see cref="DayKeyStore"/>, every image is encrypted in memory before it is written
-/// (see <see cref="ImageCipher"/>) and gets the extension .png.enc: no plaintext image ever
+/// With <c>encrypt</c> on, every image is encrypted in memory with the day's key before it is
+/// written (see <see cref="ImageCipher"/>) and gets the extension .png.enc: no plaintext image ever
 /// touches the disk, not even as a temporary file.
 ///
 /// Images are stored unredacted: nothing is recognized or blacked out at capture time. Reading
@@ -23,15 +23,13 @@ namespace Capture.Storage;
 /// app's own "Export day…"). Any path that hands images or their text to something else must go
 /// through on-demand text recognition and redaction first.
 /// </summary>
-public sealed class FileImageStore(string root, int maxDimension, DayKeyStore? keys = null, bool encrypt = true) : IImageStore
+public sealed class FileImageStore(string root, DayKeyStore keys, bool encrypt = true) : IImageStore
 {
-    private readonly bool _encrypt = keys is not null && encrypt;
-
     public const string CapturesFolderName = "captures";
     public const string DayFolderFormat = "yyyy-MM-dd";
     public const string EncryptedExtension = ".enc";
 
-    public SavedImage Save(RawWindowImage image, int sequence)
+    public string Save(RawWindowImage image, int sequence)
     {
         DateTime local = image.Timestamp.LocalDateTime;
         string process = SafeFileNamePart(Path.GetFileNameWithoutExtension(image.Placement.Window.ProcessName ?? "window"));
@@ -39,11 +37,10 @@ public sealed class FileImageStore(string root, int maxDimension, DayKeyStore? k
             CapturesFolderName,
             local.ToString(DayFolderFormat, CultureInfo.InvariantCulture),
             $"{local.ToString("HHmmss_fff", CultureInfo.InvariantCulture)}_w{sequence}_{process}.png"
-            + (_encrypt ? EncryptedExtension : ""));
+            + (encrypt ? EncryptedExtension : ""));
 
-        byte[] encoded = Encode(image, out int width, out int height);
-        Write(relativePath, DateOnly.FromDateTime(local), encoded);
-        return new SavedImage(relativePath, width, height);
+        Write(relativePath, DateOnly.FromDateTime(local), Encode(image));
+        return relativePath;
     }
 
     /// <summary>Writes an encoded image, encrypted if this store encrypts. Clears <paramref name="encoded"/> when it encrypts.</summary>
@@ -53,9 +50,9 @@ public sealed class FileImageStore(string root, int maxDimension, DayKeyStore? k
         Directory.CreateDirectory(Path.GetDirectoryName(fullPath)!);
 
         byte[] data = encoded;
-        if (_encrypt)
+        if (encrypt)
         {
-            data = ImageCipher.Encrypt(keys!.GetOrCreate(day), encoded, relativePath);
+            data = ImageCipher.Encrypt(keys.GetOrCreate(day), encoded, relativePath);
             Array.Clear(encoded);
         }
 
@@ -66,19 +63,18 @@ public sealed class FileImageStore(string root, int maxDimension, DayKeyStore? k
     }
 
     /// <summary>
-    /// The image file as an image again (PNG, or AVIF from earlier versions), decrypted if it is
+    /// The image file as an image again (PNG), decrypted if it is
     /// encrypted, NOT redacted. Throws <see cref="CryptographicException"/> if the day's key is
     /// gone or the file was changed, moved or swapped. Works also when encryption of new images is
     /// off, as long as the keys are there.
     /// </summary>
-    internal byte[] ReadUnredacted(string relativePath) =>
-        ReadUnredacted(root, relativePath, keys is null ? null : keys.Find);
+    internal byte[] ReadUnredacted(string relativePath) => ReadUnredacted(root, relativePath, keys.Find);
 
     /// <summary>
     /// Reads one image file below <paramref name="root"/>, decrypted with the day key that
     /// <paramref name="findKey"/> returns, NOT redacted. Only files inside the captures folder are read.
     /// </summary>
-    internal static byte[] ReadUnredacted(string root, string relativePath, Func<DateOnly, byte[]?>? findKey)
+    internal static byte[] ReadUnredacted(string root, string relativePath, Func<DateOnly, byte[]?> findKey)
     {
         string fullPath = Path.GetFullPath(Path.Combine(root, relativePath));
         string capturesRoot = Path.GetFullPath(Path.Combine(root, CapturesFolderName)) + Path.DirectorySeparatorChar;
@@ -91,10 +87,6 @@ public sealed class FileImageStore(string root, int maxDimension, DayKeyStore? k
         if (!relativePath.EndsWith(EncryptedExtension, StringComparison.OrdinalIgnoreCase))
         {
             return file;
-        }
-        if (findKey is null)
-        {
-            throw new CryptographicException("No day keys available, so encrypted images cannot be read.");
         }
         DateOnly day = DayOf(relativePath)
                        ?? throw new CryptographicException("The image is not in a day folder, so its key is unknown.");
@@ -184,10 +176,8 @@ public sealed class FileImageStore(string root, int maxDimension, DayKeyStore? k
         }
     }
 
-    private byte[] Encode(RawWindowImage image, out int width, out int height)
+    private static byte[] Encode(RawWindowImage image)
     {
-        width = image.Width;
-        height = image.Height;
         var readSettings = new PixelReadSettings(
             (uint)image.Width, (uint)image.Height, StorageType.Char, PixelMapping.BGRA);
 
@@ -195,16 +185,6 @@ public sealed class FileImageStore(string root, int maxDimension, DayKeyStore? k
         magick.ReadPixels(image.Pixels, readSettings);
         // The image is opaque; the alpha channel only carries leftovers from window capture.
         magick.Alpha(AlphaAction.Off);
-
-        // Optionally scale down so the longer side is at most maxDimension (0: keep the original
-        // size). Scale() averages pixels, the cheapest method. Never scales up.
-        int longerSide = Math.Max(width, height);
-        if (maxDimension > 0 && longerSide > maxDimension)
-        {
-            width = Math.Max(1, (int)Math.Round(width * (double)maxDimension / longerSide));
-            height = Math.Max(1, (int)Math.Round(height * (double)maxDimension / longerSide));
-            magick.Scale(new MagickGeometry((uint)width, (uint)height) { IgnoreAspectRatio = true });
-        }
 
         // No metadata chunks (creation times and the like): the database holds the facts.
         magick.Strip();

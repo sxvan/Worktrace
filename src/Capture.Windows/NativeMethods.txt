@@ -17,13 +17,8 @@ GetWindowLong
 DwmGetWindowAttribute
 EnumDisplayMonitors
 GetMonitorInfo
-MONITORINFOEXW
-GetDpiForMonitor
 OpenProcess
 QueryFullProcessImageName
 CloseHandle
-IUIAutomation
-CUIAutomation
-IUIAutomationElement
 GetClassName
 GetLayeredWindowAttributes

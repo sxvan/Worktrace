@@ -16,13 +16,12 @@ public enum EventType
     Resumed,
 }
 
-/// <summary>One row of the events table. Process, title and handle are only set as far as the window's rule allows.</summary>
+/// <summary>One row of the events table. Process and title are only set as far as the window's rule allows.</summary>
 public sealed record ActivityEvent(
     DateTimeOffset Timestamp,
     EventType Type,
     string? ProcessName = null,
-    string? WindowTitle = null,
-    long? WindowHandle = null);
+    string? WindowTitle = null);
 
 public static class EventTypeNames
 {

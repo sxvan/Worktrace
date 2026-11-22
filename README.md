@@ -43,14 +43,14 @@ at screenshots yourself, use **Export day…** in the tray menu, which writes th
 Some things are never recorded, whatever the rules say:
 
 - Private browser windows (InPrivate, Incognito, Private Browsing).
-- The screen while a password field has focus (`skipPasswordFields`).
+- The Windows shell (desktop, taskbar) and TimeCapture's own windows.
 
 Screenshots are stored as lossless PNG files at full size, encrypted (`encryptImages`), and deleted
 after `retentionDays` days. Window titles and events are kept. A window that looks exactly as in
 its last stored screenshot is not stored again: same title, and no visible change when the two are
 compared pixel by pixel at full size (a blinking text cursor does not count).
 
-Databases created by earlier versions (which stored recognized text) are not migrated: the app
+Databases created by earlier versions are not migrated: the app
 refuses to start with one. Delete `capture.db` (and `capture.db-wal`, `capture.db-shm`) in the
 storage root.
 
@@ -73,9 +73,8 @@ laptop, old drive), backups and sync tools that copy the files, and the Explorer
 What it does not protect against: malware running under your account, which can ask DPAPI for the
 keys just like the app does. The data is tied to your Windows profile: after a reinstall, or if an
 administrator resets your password, the encrypted screenshots can no longer be read. A separate
-recovery key would be a possible addition later. Screenshots from earlier versions (`.avif`, `.png`)
-are not encrypted and stay readable. Turning `encryptImages` off stores new screenshots unencrypted;
-encrypted ones stay readable.
+recovery key would be a possible addition later. Turning `encryptImages` off stores new screenshots
+as plain `.png`; encrypted ones stay readable.
 
 ## Build and run
 
@@ -86,11 +85,16 @@ dotnet build Worktrace.slnx
 dotnet test --project tests/Capture.Core.Tests
 dotnet run --project src/Capture.App
 dotnet run --project src/Capture.Cli -- export
+dotnet publish src/Capture.App -c Release
 ```
 
-TimeCapture appears as an icon in the notification area. Its menu lets you pause and resume recording,
-open the captures folder, open the config file, and turn "Start with Windows" on or off. Started from a
-terminal, it also prints what it does there.
+`dotnet publish` produces a self-contained `TimeCapture.exe` with its native libraries and
+`config.json` next to it.
+
+TimeCapture appears as an icon in the notification area. Its icon and menu show the current state
+(capturing, idle, paused, not capturing). The menu lets you pause for 15 minutes, for an hour or until
+resumed, export a day's screenshots (**Export day…**), open the config file, and turn "Start with
+Windows" on or off. Started from a terminal, it also prints what it does there.
 
 ## Configuration
 
@@ -158,9 +162,7 @@ never captured and do not hide the windows below them.
 | `retentionDays` | 14 | Screenshots older than this are deleted. |
 | `storeImages` | true | Keep the screenshots (layer 2). Off keeps titles and timing only. |
 | `encryptImages` | true | Encrypt the screenshots on disk, see [Protection on disk](#protection-on-disk). |
-| `maxImageDimension` | 0 | Screenshots are scaled down so the longer side has at most this many pixels. 0 keeps the original size, which keeps small text readable. |
 | `stripUrlQueries` | false | Cut query strings and fragments off URLs in stored window titles, also where the secret check sees nothing. |
-| `skipPasswordFields` | true | Take no screenshot while a password field has focus. |
 
 ## Handing a day to Claude
 
@@ -168,11 +170,18 @@ never captured and do not hide the windows below them.
 contain no screen content; `screenshot` passes through your hands one screenshot at a time.
 
 ```powershell
-timecapture-cli export [--day 2026-11-20]
-timecapture-cli sessions [--day 2026-11-20]
-timecapture-cli screenshot <id>
-timecapture-cli screenshot --at "2026-11-20 14:30"
+timecapture-cli export [--day 2026-11-20] [--root DIR]
+timecapture-cli sessions [--day 2026-11-20] [--transcripts DIR]
+timecapture-cli screenshot <id> [--out DIR] [--root DIR]
+timecapture-cli screenshot --at "2026-11-20 14:30" [--out DIR] [--root DIR]
 ```
+
+`--day` defaults to today. The storage root comes from `--root`, else the `TIMECAPTURE_ROOT`
+environment variable, else `storageRoot` in the `config.json` next to `timecapture-cli.exe`, else
+`%LOCALAPPDATA%\TimeCapture`.
+
+The repo includes a Claude Code skill, [`timesheet`](.claude/skills/timesheet/SKILL.md), that walks
+Claude through these commands to draft a day's timesheet entries.
 
 **`export`** prints what TimeCapture recorded for one day: the visits (which window had focus, from
 when to when, with the window title as stored, that is, scrubbed) and the ids of the screenshots
@@ -228,7 +237,7 @@ Inside the storage root:
 | Path | Content |
 |---|---|
 | `src/Capture.Core` | Rules, capture triggers, redaction and image handling, independent of Windows |
-| `src/Capture.Windows` | Window inspection, screen capture, password field detection |
+| `src/Capture.Windows` | Window inspection and screen capture |
 | `src/Capture.Storage` | SQLite database, image files, retention |
 | `src/Capture.App` | The tray application |
 | `src/Capture.Cli` | `timecapture-cli`: daily export, on-demand text recognition and the review before sharing |

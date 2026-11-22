@@ -1,6 +1,5 @@
 using System.Globalization;
 using Capture.Core.Capturing;
-using Capture.Core.Geometry;
 using Capture.Core.Monitoring;
 using Capture.Core.Redaction;
 using Capture.Core.Triggers;
@@ -14,9 +13,6 @@ namespace Capture.Storage;
 public sealed record CapturedWindowRecord(
     WindowPlacement Placement,
     bool IsFocused,
-    int Width,
-    int Height,
-    ulong DHash,
     string? FilePath,
     long? DedupeReferenceId);
 
@@ -32,10 +28,10 @@ public sealed class CaptureDatabase : IDisposable
     private const string TimestampFormat = "yyyy-MM-dd'T'HH:mm:ss.fff'Z'";
 
     /// <summary>
-    /// Schema version. Databases of earlier versions (which stored recognized text) are not
-    /// migrated: the app refuses to open them, and they have to be deleted.
+    /// Schema version. Databases of earlier versions are not migrated: the app refuses to open
+    /// them, and they have to be deleted.
     /// </summary>
-    public const int SchemaVersion = 6;
+    public const int SchemaVersion = 7;
 
     private readonly Lock _lock = new();
     private readonly SqliteConnection _connection;
@@ -58,8 +54,8 @@ public sealed class CaptureDatabase : IDisposable
         {
             _connection.Dispose();
             throw new InvalidDataException(
-                $"{path} was created by an earlier version of the app (schema {version}) and may contain recognized "
-                + "screen text. It is not migrated: delete it (with its -wal and -shm files) and start again.");
+                $"{path} was created by an earlier version of the app (schema {version}). It is not migrated: "
+                + "delete it (with its -wal and -shm files) and start again.");
         }
 
         Execute("PRAGMA journal_mode=WAL;");
@@ -73,57 +69,27 @@ public sealed class CaptureDatabase : IDisposable
                 timestamp     TEXT NOT NULL,   -- UTC, ISO 8601
                 type          TEXT NOT NULL,
                 process_name  TEXT,            -- null unless a rule covers the window
-                window_title  TEXT,            -- null unless a rule covers the window
-                window_handle INTEGER          -- null unless a rule covers the window
+                window_title  TEXT             -- null unless a rule covers the window
             );
             CREATE INDEX IF NOT EXISTS ix_events_timestamp ON events(timestamp);
 
-            -- One row per distinct monitor configuration ever seen.
-            CREATE TABLE IF NOT EXISTS monitors (
-                id          INTEGER PRIMARY KEY,
-                device_name TEXT NOT NULL,
-                left        INTEGER NOT NULL,
-                top         INTEGER NOT NULL,
-                right       INTEGER NOT NULL,
-                bottom      INTEGER NOT NULL,
-                dpi_scale   REAL NOT NULL,
-                is_primary  INTEGER NOT NULL,
-                UNIQUE (device_name, left, top, right, bottom, dpi_scale, is_primary)
-            );
-
             -- One row per capture that recorded at least one capturable window.
             CREATE TABLE IF NOT EXISTS captures (
-                id                    INTEGER PRIMARY KEY,
-                timestamp             TEXT NOT NULL,   -- UTC, ISO 8601
-                trigger               TEXT NOT NULL,
-                focused_window_handle INTEGER          -- null if the focused window is not a captured one
+                id        INTEGER PRIMARY KEY,
+                timestamp TEXT NOT NULL,   -- UTC, ISO 8601
+                trigger   TEXT NOT NULL
             );
             CREATE INDEX IF NOT EXISTS ix_captures_timestamp ON captures(timestamp);
 
             -- One row, and at most one image, per capturable window per capture.
             CREATE TABLE IF NOT EXISTS capture_windows (
-                id               INTEGER PRIMARY KEY,
-                capture_id       INTEGER NOT NULL REFERENCES captures(id),
-                window_handle    INTEGER NOT NULL,
-                process_name     TEXT NOT NULL,
-                window_title     TEXT NOT NULL,
-                left             INTEGER NOT NULL,   -- window bounds, virtual-screen pixels
-                top              INTEGER NOT NULL,
-                right            INTEGER NOT NULL,
-                bottom           INTEGER NOT NULL,
-                visible_left     INTEGER NOT NULL,   -- bounding box of the visible parts
-                visible_top      INTEGER NOT NULL,
-                visible_right    INTEGER NOT NULL,
-                visible_bottom   INTEGER NOT NULL,
-                visible_fraction REAL NOT NULL,      -- share of the window that was visible, 0..1
-                z_index          INTEGER NOT NULL,   -- 0 = topmost of all windows
-                is_focused       INTEGER NOT NULL,
-                monitor_id       INTEGER NOT NULL REFERENCES monitors(id),
-                width            INTEGER NOT NULL,   -- image size
-                height           INTEGER NOT NULL,
-                dhash            INTEGER NOT NULL,
-                file_path        TEXT,               -- null if deduplicated or removed by retention
-                dedupe_ref_id    INTEGER REFERENCES capture_windows(id)
+                id            INTEGER PRIMARY KEY,
+                capture_id    INTEGER NOT NULL REFERENCES captures(id),
+                process_name  TEXT NOT NULL,
+                window_title  TEXT NOT NULL,
+                is_focused    INTEGER NOT NULL,
+                file_path     TEXT,               -- null if deduplicated or removed by retention
+                dedupe_ref_id INTEGER REFERENCES capture_windows(id)
             );
             CREATE INDEX IF NOT EXISTS ix_capture_windows_capture ON capture_windows(capture_id);
 
@@ -134,7 +100,7 @@ public sealed class CaptureDatabase : IDisposable
                 wrapped_key BLOB NOT NULL
             );
 
-            PRAGMA user_version=6;
+            PRAGMA user_version=7;
             """);
     }
 
@@ -144,14 +110,13 @@ public sealed class CaptureDatabase : IDisposable
         {
             using SqliteCommand command = _connection.CreateCommand();
             command.CommandText = """
-                INSERT INTO events (timestamp, type, process_name, window_title, window_handle)
-                VALUES ($timestamp, $type, $process, $title, $handle);
+                INSERT INTO events (timestamp, type, process_name, window_title)
+                VALUES ($timestamp, $type, $process, $title);
                 """;
             command.Parameters.AddWithValue("$timestamp", Format(e.Timestamp));
             command.Parameters.AddWithValue("$type", e.Type.ToDbName());
             command.Parameters.AddWithValue("$process", (object?)e.ProcessName ?? DBNull.Value);
             command.Parameters.AddWithValue("$title", (object?)_titleScrubber.Scrub(e.WindowTitle) ?? DBNull.Value);
-            command.Parameters.AddWithValue("$handle", (object?)e.WindowHandle ?? DBNull.Value);
             command.ExecuteNonQuery();
         }
     }
@@ -161,7 +126,7 @@ public sealed class CaptureDatabase : IDisposable
     /// ids in the order of <paramref name="windows"/>.
     /// </summary>
     public IReadOnlyList<long> InsertCapture(
-        DateTimeOffset timestamp, TriggerType trigger, long? focusedWindowHandle, IReadOnlyList<CapturedWindowRecord> windows)
+        DateTimeOffset timestamp, TriggerType trigger, IReadOnlyList<CapturedWindowRecord> windows)
     {
         lock (_lock)
         {
@@ -172,12 +137,11 @@ public sealed class CaptureDatabase : IDisposable
             {
                 command.Transaction = transaction;
                 command.CommandText = """
-                    INSERT INTO captures (timestamp, trigger, focused_window_handle)
-                    VALUES ($timestamp, $trigger, $focused) RETURNING id;
+                    INSERT INTO captures (timestamp, trigger)
+                    VALUES ($timestamp, $trigger) RETURNING id;
                     """;
                 command.Parameters.AddWithValue("$timestamp", Format(timestamp));
                 command.Parameters.AddWithValue("$trigger", trigger.ToDbName());
-                command.Parameters.AddWithValue("$focused", (object?)focusedWindowHandle ?? DBNull.Value);
                 captureId = (long)command.ExecuteScalar()!;
             }
 
@@ -185,43 +149,18 @@ public sealed class CaptureDatabase : IDisposable
             foreach (CapturedWindowRecord window in windows)
             {
                 WindowInfo info = window.Placement.Window;
-                RectInt visible = window.Placement.VisibleBounds;
-                long monitorId = GetOrAddMonitor(window.Placement.Monitor, transaction);
 
                 using SqliteCommand command = _connection.CreateCommand();
                 command.Transaction = transaction;
                 command.CommandText = """
-                    INSERT INTO capture_windows (
-                        capture_id, window_handle, process_name, window_title,
-                        left, top, right, bottom,
-                        visible_left, visible_top, visible_right, visible_bottom, visible_fraction,
-                        z_index, is_focused, monitor_id, width, height, dhash, file_path, dedupe_ref_id)
-                    VALUES (
-                        $capture, $handle, $process, $title,
-                        $left, $top, $right, $bottom,
-                        $vleft, $vtop, $vright, $vbottom, $vfraction,
-                        $z, $focused, $monitor, $width, $height, $dhash, $path, $ref)
+                    INSERT INTO capture_windows (capture_id, process_name, window_title, is_focused, file_path, dedupe_ref_id)
+                    VALUES ($capture, $process, $title, $focused, $path, $ref)
                     RETURNING id;
                     """;
                 command.Parameters.AddWithValue("$capture", captureId);
-                command.Parameters.AddWithValue("$handle", info.Handle);
                 command.Parameters.AddWithValue("$process", info.ProcessName ?? "");
                 command.Parameters.AddWithValue("$title", _titleScrubber.Scrub(info.Title) ?? "");
-                command.Parameters.AddWithValue("$left", info.Bounds.Left);
-                command.Parameters.AddWithValue("$top", info.Bounds.Top);
-                command.Parameters.AddWithValue("$right", info.Bounds.Right);
-                command.Parameters.AddWithValue("$bottom", info.Bounds.Bottom);
-                command.Parameters.AddWithValue("$vleft", visible.Left);
-                command.Parameters.AddWithValue("$vtop", visible.Top);
-                command.Parameters.AddWithValue("$vright", visible.Right);
-                command.Parameters.AddWithValue("$vbottom", visible.Bottom);
-                command.Parameters.AddWithValue("$vfraction", window.Placement.VisibleFraction);
-                command.Parameters.AddWithValue("$z", info.ZIndex);
                 command.Parameters.AddWithValue("$focused", window.IsFocused ? 1 : 0);
-                command.Parameters.AddWithValue("$monitor", monitorId);
-                command.Parameters.AddWithValue("$width", window.Width);
-                command.Parameters.AddWithValue("$height", window.Height);
-                command.Parameters.AddWithValue("$dhash", unchecked((long)window.DHash));
                 command.Parameters.AddWithValue("$path", (object?)window.FilePath ?? DBNull.Value);
                 command.Parameters.AddWithValue("$ref", (object?)window.DedupeReferenceId ?? DBNull.Value);
                 ids.Add((long)command.ExecuteScalar()!);
@@ -302,27 +241,6 @@ public sealed class CaptureDatabase : IDisposable
         {
             _connection.Dispose();
         }
-    }
-
-    private long GetOrAddMonitor(MonitorInfo monitor, SqliteTransaction transaction)
-    {
-        using SqliteCommand command = _connection.CreateCommand();
-        command.Transaction = transaction;
-        command.CommandText = """
-            INSERT OR IGNORE INTO monitors (device_name, left, top, right, bottom, dpi_scale, is_primary)
-            VALUES ($device, $left, $top, $right, $bottom, $scale, $primary);
-            SELECT id FROM monitors
-            WHERE device_name = $device AND left = $left AND top = $top AND right = $right AND bottom = $bottom
-              AND dpi_scale = $scale AND is_primary = $primary;
-            """;
-        command.Parameters.AddWithValue("$device", monitor.DeviceName);
-        command.Parameters.AddWithValue("$left", monitor.Bounds.Left);
-        command.Parameters.AddWithValue("$top", monitor.Bounds.Top);
-        command.Parameters.AddWithValue("$right", monitor.Bounds.Right);
-        command.Parameters.AddWithValue("$bottom", monitor.Bounds.Bottom);
-        command.Parameters.AddWithValue("$scale", monitor.Scale);
-        command.Parameters.AddWithValue("$primary", monitor.IsPrimary ? 1 : 0);
-        return (long)command.ExecuteScalar()!;
     }
 
     private object? Scalar(string sql)
