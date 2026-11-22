@@ -53,22 +53,23 @@ internal static class CaptureHost
 
     private static int RunTray(AppPaths paths, CaptureConfig config)
     {
-        Log.Information("Starting. Storage root: {Root}. Rules: {RuleCount}", paths.Root, config.Rules.Count);
+        Log.Information("Starting. Storage root: {Root}. Include rules: {IncludeCount}. Exclude rules: {ExcludeCount}",
+            paths.Root, config.Include.Count, config.Exclude.Count);
         foreach (string warning in paths.Warnings)
         {
             // Paths only, no screen content.
             Log.Warning("Storage: {Warning}", warning);
             Console.WriteLine("Warning: " + warning);
         }
-        if (config.Rules.Count == 0)
+        if (config.Include.Count == 0)
         {
-            Log.Warning("config.json has no rules; nothing will be recorded");
-            Console.WriteLine($"Note: no rules in {paths.ConfigFile}; nothing will be recorded until you add some.");
+            Log.Warning("config.json has no include rules; nothing will be recorded");
+            Console.WriteLine($"Note: no include rules in {paths.ConfigFile}; nothing will be recorded until you add some.");
         }
 
         using var database = new CaptureDatabase(paths.DatabaseFile, new TextScrubber([new HeuristicSecretDetector()], config.StripUrlQueries));
         var tracker = new ActivityTracker(TimeSpan.FromSeconds(config.IdleTimeoutSeconds));
-        var rules = new WindowRuleMatcher(config.Rules);
+        var rules = new WindowRuleMatcher(config);
 
         // The monitor thread only enqueues; everything else happens on the coordinator.
         var signals = Channel.CreateUnbounded<MonitorSignal>(new UnboundedChannelOptions { SingleReader = true });

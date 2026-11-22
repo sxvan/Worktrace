@@ -8,14 +8,17 @@ allow. Everything stays on your machine. The application contains no network cod
 
 ## What TimeCapture records
 
-For each application, a rule in `config.json` decides how much is recorded:
+Rules in `config.json` decide how much is recorded for each window:
 
-| Rule | Recorded |
+| Level | Recorded |
 |---|---|
 | `capture` | Application name, window title and screenshots |
-| `log` with `logTitles` | Application name and window title |
+| `logWithTitles` | Application name and window title |
 | `log` | Application name only |
-| no rule | Only that "another application" was in use, without name or title |
+| nothing | Only that "another application" was in use, without name or title |
+
+Include rules grant a level, exclude rules take one away (see [Rules](#rules)). A window that no include rule
+covers gets nothing.
 
 It also records when you are idle, when the screen is locked and when the computer sleeps.
 
@@ -97,41 +100,49 @@ Changes take effect when TimeCapture is restarted. When you build and run from t
 
 ### Rules
 
+There are two lists of rules, `include` and `exclude`, and their rules look the same:
+
 ```json
-"rules": [
+"include": [
   { "process": "Code.exe" },
-  { "process": "msedge.exe", "mode": "log", "logTitles": true },
+  { "process": "msedge.exe", "mode": "logWithTitles" },
   { "process": "Outlook.exe", "mode": "log" },
   { "process": "chrome.exe", "titlePatterns": ["*GitHub*", "*Stack Overflow*"] }
+],
+"exclude": [
+  { "process": "msedge.exe", "titlePatterns": ["*YouTube*", "*Netflix*"] },
+  { "process": "*", "mode": "log", "titlePatterns": ["*Bank*"] }
 ]
 ```
 
 | Field | Meaning |
 |---|---|
-| `process` | Executable name. Upper and lower case do not matter and `.exe` is optional. `*` applies to every application that has no rule of its own. |
-| `mode` | `capture` (the default) or `log`. A rule with any other value is ignored. |
-| `logTitles` | For `log` rules: also store the window title. Leave it off for password managers, mail and the like. |
+| `process` | Executable name. Upper and lower case do not matter and `.exe` is optional. `*` applies to every application. |
+| `mode` | `capture` (the default), `logWithTitles` or `log`. A rule with any other value is ignored. |
 | `titlePatterns` | Optional. The rule only applies to windows whose whole title matches one of these patterns. `*` stands for any text, `?` for one character. |
-| `excludeTitlePatterns` | Optional. The rule does not apply to windows whose whole title matches one of these patterns, whatever `titlePatterns` says. The other rules decide about them. |
 
-When an application has rules of its own, only those decide. A `log` rule for one application therefore
-exempts it from a `*` rule that captures everything else. If several rules match a window, `capture`
-wins over `log`. The `*` rule skips windows without a title. Invisible overlays, such as the NVIDIA overlay, are
+The level of a window is decided like this:
+
+1. **Include:** the strongest matching include rule grants its level. Without one, nothing is recorded.
+   The include rules add up: a `*` rule and an application's own rules all count.
+2. **Exclude:** every matching exclude rule takes its level, and everything above it, away. Excludes
+   always win over includes.
+
+| Exclude `mode` | Takes away | At most left |
+|---|---|---|
+| `capture` | Screenshots | `logWithTitles` |
+| `logWithTitles` | Window title and screenshots | `log` |
+| `log` | Everything | nothing |
+
+`capture` is the default in both lists, so an exclude rule without `mode` only stops screenshots;
+the window is still logged with its title. Use `"mode": "log"` to leave a window out entirely.
+
+In the example, YouTube and Netflix in Edge are logged with their title but never captured, and
+windows with "Bank" in their title are not recorded at all. A browser's window title is the title of
+its active page, so this works per site, as far as the site names itself in its title.
+
+An include `*` rule skips windows without a title. Invisible overlays, such as the NVIDIA overlay, are
 never captured and do not hide the windows below them.
-
-To leave out certain websites or documents, exclude them from the capturing rule by title, and let a
-`log` rule keep their title for the timesheet. A browser's window title is the title of its active
-page, so this works per site, as far as the site names itself in its title:
-
-```json
-"rules": [
-  { "process": "*", "excludeTitlePatterns": ["*YouTube*", "*Netflix*"] },
-  { "process": "*", "mode": "log", "logTitles": true }
-]
-```
-
-YouTube and Netflix windows are then logged with their title but never captured. Without the
-second rule they would be recorded as "another application" only.
 
 ### Settings
 

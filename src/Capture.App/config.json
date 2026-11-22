@@ -6,9 +6,10 @@
   "fallbackIntervalSeconds": 60,
   "minCaptureIntervalSeconds": 5,
   "idleTimeoutSeconds": 180,
-  "rules": [
+  "include": [
     { "process": "*", "mode": "capture" }
   ],
+  "exclude": [],
   "retentionDays": 14,
   "storeImages": true,
   "encryptImages": true,
