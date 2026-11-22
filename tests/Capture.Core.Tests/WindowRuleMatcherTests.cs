@@ -1,4 +1,3 @@
-using System.Text.Json;
 using Capture.Core.Rules;
 using Capture.Core.Config;
 
@@ -238,46 +237,5 @@ public class WindowRuleMatcherTests
         Assert.False(matcher.HasRuleFor("keepass.exe"));
         Assert.Equal(WindowClassification.Other, matcher.Classify("keepass.exe", "Bank"));
         Assert.True(matcher.HasRuleFor("notepad.exe"));
-    }
-
-    // ---- Config ----
-
-    [Fact]
-    public void Config_warns_about_the_old_rule_format()
-    {
-        const string json = """
-            {
-              "rules": [{ "process": "*" }],
-              "include": [{ "process": "msedge.exe", "mode": "log", "logTitles": true }],
-              "exclude": [{ "process": "*", "mode": "nothing" }]
-            }
-            """;
-        string path = Path.GetTempFileName();
-        try
-        {
-            File.WriteAllText(path, json);
-            CaptureConfig config = ConfigLoader.Load(path);
-
-            List<string> warnings = config.RuleWarnings().ToList();
-            Assert.Equal(3, warnings.Count);
-            Assert.Contains(warnings, w => w.Contains("\"rules\""));
-            Assert.Contains(warnings, w => w.Contains("\"logTitles\""));
-            Assert.Contains(warnings, w => w.Contains("\"nothing\""));
-        }
-        finally
-        {
-            File.Delete(path);
-        }
-    }
-
-    [Fact]
-    public void Config_without_old_keys_has_no_warnings()
-    {
-        var config = JsonSerializer.Deserialize<CaptureConfig>(
-            """{ "include": [{ "process": "*", "mode": "logWithTitles" }], "exclude": [] }""",
-            new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase })!;
-
-        Assert.Empty(config.RuleWarnings());
-        Assert.Equal(LogWithTitle, new WindowRuleMatcher(config).Classify("x.exe", "t"));
     }
 }

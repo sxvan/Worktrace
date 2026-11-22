@@ -61,12 +61,6 @@ internal static class CaptureHost
             Log.Warning("Storage: {Warning}", warning);
             Console.WriteLine("Warning: " + warning);
         }
-        foreach (string warning in config.RuleWarnings())
-        {
-            // Config content only, no screen content.
-            Log.Warning("Rules: {Warning}", warning);
-            Console.WriteLine("Warning: " + warning);
-        }
         if (config.Include.Count == 0)
         {
             Log.Warning("config.json has no include rules; nothing will be recorded");

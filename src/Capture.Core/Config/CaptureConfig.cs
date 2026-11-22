@@ -1,6 +1,3 @@
-using System.Text.Json;
-using System.Text.Json.Serialization;
-
 namespace Capture.Core.Config;
 
 /// <summary>All user-tunable settings. Serialized as config.json.</summary>
@@ -40,10 +37,6 @@ public sealed class CaptureConfig
     /// </summary>
     public List<WindowRule> Exclude { get; set; } = [];
 
-    /// <summary>The old single rule list. No longer read; only detected so the app can warn about it.</summary>
-    [JsonPropertyName("rules")]
-    public JsonElement? LegacyRules { get; set; }
-
     /// <summary>Screenshots older than this many days are deleted (layer 3).</summary>
     public int RetentionDays { get; set; } = 14;
 
@@ -75,27 +68,6 @@ public sealed class CaptureConfig
 
     /// <summary>Take no capture while the focused element is a password field.</summary>
     public bool SkipPasswordFields { get; set; } = true;
-
-    /// <summary>Problems with the rules that would otherwise go unnoticed, e.g. keys from the old rule format.</summary>
-    public IEnumerable<string> RuleWarnings()
-    {
-        if (LegacyRules is not null)
-        {
-            yield return "\"rules\" is no longer read; split it into \"include\" and \"exclude\".";
-        }
-        foreach (WindowRule rule in Include.Concat(Exclude))
-        {
-            foreach (string field in rule.UnknownFields?.Keys ?? Enumerable.Empty<string>())
-            {
-                yield return $"The rule for \"{rule.Process}\" has an unknown field \"{field}\"; it is ignored.";
-            }
-            string mode = rule.Mode?.Trim().ToLowerInvariant() ?? "";
-            if (mode is not ("" or "capture" or "logwithtitles" or "log"))
-            {
-                yield return $"The rule for \"{rule.Process}\" has an unknown mode \"{rule.Mode}\"; the rule is ignored.";
-            }
-        }
-    }
 }
 
 public sealed class WindowRule
@@ -114,8 +86,4 @@ public sealed class WindowRule
     /// Optional window title patterns with * and ? wildcards. If present, at least one must match the whole title.
     /// </summary>
     public List<string>? TitlePatterns { get; set; }
-
-    /// <summary>Old fields, no longer read; only detected so the app can warn about them.</summary>
-    [JsonExtensionData]
-    public Dictionary<string, JsonElement>? UnknownFields { get; set; }
 }

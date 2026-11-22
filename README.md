@@ -144,9 +144,6 @@ its active page, so this works per site, as far as the site names itself in its 
 An include `*` rule skips windows without a title. Invisible overlays, such as the NVIDIA overlay, are
 never captured and do not hide the windows below them.
 
-Configs from before this split used a single `rules` list and a `logTitles` field. Both are no longer
-read; TimeCapture warns about them at startup.
-
 ### Settings
 
 | Setting | Default | Meaning |
