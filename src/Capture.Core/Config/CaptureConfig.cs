@@ -62,10 +62,11 @@ public sealed class CaptureConfig
     public int DeleteRecentMinutes { get; set; } = 5;
 
     /// <summary>
-    /// Whether "Delete last minutes" also deletes the activity events (window switches, idle and
-    /// so on) of that span. Off deletes only the captures: their screenshots and window titles.
+    /// What "Delete last minutes" takes away, with the levels and meaning of an exclude rule's mode:
+    /// "capture" deletes the captures (screenshots and their window titles), "logWithTitles" also
+    /// removes the window titles from the activity events, "log" deletes the events as well.
     /// </summary>
-    public bool DeleteRecentEvents { get; set; }
+    public string DeleteRecentMode { get; set; } = "capture";
 }
 
 public sealed class WindowRule

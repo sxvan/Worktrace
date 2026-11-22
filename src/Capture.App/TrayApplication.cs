@@ -4,6 +4,7 @@ using System.Drawing.Drawing2D;
 using System.Runtime.InteropServices;
 using System.Windows.Forms;
 using Capture.Core.Config;
+using Capture.Core.Rules;
 using Capture.Storage;
 using Serilog;
 
@@ -133,11 +134,22 @@ public sealed class TrayApplication : ApplicationContext
 
     private int DeleteRecentMinutes => Math.Max(1, _config.DeleteRecentMinutes);
 
-    /// <summary>After asking, deletes the captures (and, if configured, the events) of the last few minutes.</summary>
+    /// <summary>After asking, deletes what deleteRecentMode names from the last few minutes.</summary>
     private void DeleteRecent()
     {
         int minutes = DeleteRecentMinutes;
-        string what = _config.DeleteRecentEvents ? "captures and activity events" : "captures";
+        if (WindowRuleMatcher.ParseMode(_config.DeleteRecentMode) is not RuleLevel level)
+        {
+            MessageBox.Show($"deleteRecentMode \"{_config.DeleteRecentMode}\" in the config is not one of capture, logWithTitles or log.",
+                "TimeCapture", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return;
+        }
+        string what = level switch
+        {
+            RuleLevel.Capture => "screenshots",
+            RuleLevel.LogWithTitles => "screenshots and window titles",
+            _ => "screenshots and all activity",
+        };
         if (MessageBox.Show($"Delete the {what} of the last {minutes} minutes? This cannot be undone.",
                 "TimeCapture", MessageBoxButtons.OKCancel, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2) != DialogResult.OK)
         {
@@ -147,9 +159,8 @@ public sealed class TrayApplication : ApplicationContext
         try
         {
             DateTimeOffset now = DateTimeOffset.UtcNow;
-            int files = _pipeline.DeleteRecent(now.AddMinutes(-minutes), now, _config.DeleteRecentEvents);
-            Log.Information("Deleted the last {Minutes} minutes: {Files} image file(s), events included: {Events}",
-                minutes, files, _config.DeleteRecentEvents);
+            int files = _pipeline.DeleteRecent(now.AddMinutes(-minutes), now, level);
+            Log.Information("Deleted the last {Minutes} minutes ({Level}): {Files} image file(s)", minutes, level, files);
         }
         catch (Exception ex)
         {

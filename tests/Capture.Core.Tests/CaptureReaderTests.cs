@@ -94,6 +94,20 @@ public sealed class CaptureReaderTests : IDisposable
     }
 
     [Fact]
+    public void Clearing_recent_event_titles_keeps_the_events()
+    {
+        _database.InsertEvent(new ActivityEvent(T0, EventType.Foreground, "Code.exe", "Program.cs"));
+        _database.InsertEvent(new ActivityEvent(T0.AddMinutes(10), EventType.Foreground, "Code.exe", "Secret.cs"));
+
+        Assert.Equal(1, _database.ClearEventTitlesSince(T0.AddMinutes(10)));
+
+        using var reader = new CaptureReader(_dbPath);
+        var events = reader.ReadEvents(T0, T0.AddHours(1));
+        Assert.Equal(["Program.cs", null], events.Select(e => e.WindowTitle));
+        Assert.Equal(["Code.exe", "Code.exe"], events.Select(e => e.ProcessName));
+    }
+
+    [Fact]
     public void Events_and_screenshots_are_read_back()
     {
         _database.InsertEvent(new ActivityEvent(T0, EventType.Foreground, "Code.exe", "Program.cs"));

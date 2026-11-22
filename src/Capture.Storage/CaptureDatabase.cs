@@ -233,6 +233,18 @@ public sealed class CaptureDatabase : IDisposable
         }
     }
 
+    /// <summary>Removes the window title of every activity event at or after <paramref name="since"/>. Returns the number changed.</summary>
+    public int ClearEventTitlesSince(DateTimeOffset since)
+    {
+        lock (_lock)
+        {
+            using SqliteCommand command = _connection.CreateCommand();
+            command.CommandText = "UPDATE events SET window_title = NULL WHERE timestamp >= $since AND window_title IS NOT NULL;";
+            command.Parameters.AddWithValue("$since", Format(since));
+            return command.ExecuteNonQuery();
+        }
+    }
+
     /// <summary>
     /// Forgets the image files of all day folders before <paramref name="firstDayToKeep"/>:
     /// rows stay, their file path becomes null. Returns the number of rows changed.

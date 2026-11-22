@@ -165,7 +165,7 @@ never captured and do not hide the windows below them.
 | `encryptImages` | true | Encrypt the screenshots on disk, see [Protection on disk](#protection-on-disk). |
 | `stripUrlQueries` | false | Cut query strings and fragments off URLs in stored window titles, also where the secret check sees nothing. |
 | `deleteRecentMinutes` | 5 | How far back **Delete last minutes…** in the tray menu reaches. |
-| `deleteRecentEvents` | false | Let **Delete last minutes…** also delete the activity events (window switches, idle, …) of that span. Off deletes only the captures: screenshots and their window titles. |
+| `deleteRecentMode` | `capture` | What **Delete last minutes…** takes away, read like an exclude rule's `mode`: `capture` deletes the screenshots (the captures with their window titles), `logWithTitles` also removes the window titles from the activity events, `log` deletes the events too. |
 
 ## Handing a day to Claude
 

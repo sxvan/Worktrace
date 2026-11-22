@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
 using Capture.Core.Pipeline;
+using Capture.Core.Rules;
 using Capture.Core.Triggers;
 using Capture.Storage;
 
@@ -131,11 +132,12 @@ public sealed class CapturePipeline : IDisposable
 
     /// <summary>
     /// Deletes everything captured from <paramref name="since"/> up to <paramref name="now"/>: the
-    /// database rows, their image files, and captures still waiting in the queue. With
-    /// <paramref name="includeEvents"/>, also the activity events of that span. Safe to call from
-    /// any thread. Returns the number of image files deleted.
+    /// database rows, their image files, and captures still waiting in the queue. Like an exclude
+    /// rule, <paramref name="level"/> also takes everything above it away from the activity events of
+    /// that span: <see cref="RuleLevel.LogWithTitles"/> their window titles, <see cref="RuleLevel.Log"/>
+    /// the events themselves. Safe to call from any thread. Returns the number of image files deleted.
     /// </summary>
-    public int DeleteRecent(DateTimeOffset since, DateTimeOffset now, bool includeEvents)
+    public int DeleteRecent(DateTimeOffset since, DateTimeOffset now, RuleLevel level)
     {
         lock (_processing)
         {
@@ -143,9 +145,13 @@ public sealed class CapturePipeline : IDisposable
             IReadOnlyList<string> files = _database.DeleteCapturesSince(since);
             // The remembered images may be among the deleted ones; a later duplicate must not point at them.
             _deduplicator.Clear();
-            if (includeEvents)
+            if (level <= RuleLevel.Log)
             {
                 _database.DeleteEventsSince(since);
+            }
+            else if (level == RuleLevel.LogWithTitles)
+            {
+                _database.ClearEventTitlesSince(since);
             }
 
             int deleted = 0;

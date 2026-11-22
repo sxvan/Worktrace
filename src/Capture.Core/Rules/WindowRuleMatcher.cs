@@ -16,6 +16,15 @@ public enum WindowMode
     Capture,
 }
 
+/// <summary>The levels a rule's mode can name, weakest first.</summary>
+public enum RuleLevel
+{
+    Other,
+    Log,
+    LogWithTitles,
+    Capture,
+}
+
 /// <param name="LogTitle">Whether the window title may be stored. Always true for <see cref="WindowMode.Capture"/>.</param>
 public readonly record struct WindowClassification(WindowMode Mode, bool LogTitle)
 {
@@ -36,16 +45,7 @@ public sealed class WindowRuleMatcher
 
     private static readonly TimeSpan MatchTimeout = TimeSpan.FromMilliseconds(100);
 
-    /// <summary>The levels a rule can name, weakest first.</summary>
-    private enum Level
-    {
-        Other,
-        Log,
-        LogWithTitles,
-        Capture,
-    }
-
-    private sealed record Rule(string Process, Level Level, Regex[]? TitlePatterns);
+    private sealed record Rule(string Process, RuleLevel Level, Regex[]? TitlePatterns);
 
     /// <summary>A rule with this process name applies to every application.</summary>
     public const string AnyProcess = "*";
@@ -75,7 +75,7 @@ public sealed class WindowRuleMatcher
             return false;
         }
         // An exclude that takes everything away from every window of the process.
-        return !_exclude.Any(rule => rule.Level == Level.Log && rule.TitlePatterns is null && AppliesTo(rule, process));
+        return !_exclude.Any(rule => rule.Level == RuleLevel.Log && rule.TitlePatterns is null && AppliesTo(rule, process));
     }
 
     /// <summary>True if the window may be captured.</summary>
@@ -90,7 +90,7 @@ public sealed class WindowRuleMatcher
         }
 
         string process = NormalizeProcess(processName);
-        Level granted = Level.Other;
+        RuleLevel granted = RuleLevel.Other;
         foreach (Rule rule in _include)
         {
             // The catch-all skips untitled windows: those are helpers and overlays.
@@ -103,7 +103,7 @@ public sealed class WindowRuleMatcher
 
         foreach (Rule rule in _exclude)
         {
-            if (granted == Level.Other)
+            if (granted == RuleLevel.Other)
             {
                 break;
             }
@@ -115,9 +115,9 @@ public sealed class WindowRuleMatcher
 
         return granted switch
         {
-            Level.Capture => new WindowClassification(WindowMode.Capture, true),
-            Level.LogWithTitles => new WindowClassification(WindowMode.Log, true),
-            Level.Log => new WindowClassification(WindowMode.Log, false),
+            RuleLevel.Capture => new WindowClassification(WindowMode.Capture, true),
+            RuleLevel.LogWithTitles => new WindowClassification(WindowMode.Log, true),
+            RuleLevel.Log => new WindowClassification(WindowMode.Log, false),
             _ => WindowClassification.Other,
         };
     }
@@ -135,19 +135,25 @@ public sealed class WindowRuleMatcher
         return false;
     }
 
+    /// <summary>
+    /// The level a mode names: "capture" (also when empty), "logWithTitles" or "log", case-insensitive.
+    /// Null for any other value.
+    /// </summary>
+    public static RuleLevel? ParseMode(string? mode) => mode?.Trim().ToLowerInvariant() switch
+    {
+        null or "" or "capture" => RuleLevel.Capture,
+        "logwithtitles" => RuleLevel.LogWithTitles,
+        "log" => RuleLevel.Log,
+        _ => null,
+    };
+
     private static List<Rule> Parse(IEnumerable<WindowRule> rules)
     {
         var parsed = new List<Rule>();
         foreach (WindowRule rule in rules)
         {
             string process = NormalizeProcess(rule.Process);
-            Level? level = rule.Mode?.Trim().ToLowerInvariant() switch
-            {
-                null or "" or "capture" => Level.Capture,
-                "logwithtitles" => Level.LogWithTitles,
-                "log" => Level.Log,
-                _ => null, // unknown mode: ignore the rule instead of guessing
-            };
+            RuleLevel? level = ParseMode(rule.Mode); // unknown mode: ignore the rule instead of guessing
             if (process.Length == 0 || level is null)
             {
                 continue;

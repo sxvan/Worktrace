@@ -15,7 +15,7 @@
   "encryptImages": true,
   "stripUrlQueries": false,
   "deleteRecentMinutes": 5,
-  "deleteRecentEvents": false
+  "deleteRecentMode": "capture"
 }
 
 
