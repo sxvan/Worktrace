@@ -123,7 +123,7 @@ internal static class CaptureHost
         }, TaskContinuationOptions.OnlyOnFaulted);
 
         Application.EnableVisualStyles();
-        using (var tray = new TrayApplication(coordinator, paths, imageStore))
+        using (var tray = new TrayApplication(coordinator, pipeline, config, paths, imageStore))
         {
             Application.Run(tray);
         }

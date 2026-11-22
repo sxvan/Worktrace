@@ -74,6 +74,16 @@ public sealed class Deduplicator
         _lastSaved[windowHandle] = new Saved(imageId, title, width, height, day, gray);
     }
 
+    /// <summary>Forgets every remembered image, e.g. after their rows were deleted.</summary>
+    public void Clear()
+    {
+        foreach (Saved saved in _lastSaved.Values)
+        {
+            Array.Clear(saved.Gray);
+        }
+        _lastSaved.Clear();
+    }
+
     /// <summary>True if any tile of the two images (same size, grayscale) changed noticeably.</summary>
     public static bool HasChanged(byte[] before, byte[] after, int width, int height)
     {

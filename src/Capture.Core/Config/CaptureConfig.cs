@@ -57,6 +57,15 @@ public sealed class CaptureConfig
     /// recognize, at the cost of ids some tools keep there.
     /// </summary>
     public bool StripUrlQueries { get; set; }
+
+    /// <summary>How far back the tray menu's "Delete last minutes" reaches.</summary>
+    public int DeleteRecentMinutes { get; set; } = 5;
+
+    /// <summary>
+    /// Whether "Delete last minutes" also deletes the activity events (window switches, idle and
+    /// so on) of that span. Off deletes only the captures: their screenshots and window titles.
+    /// </summary>
+    public bool DeleteRecentEvents { get; set; }
 }
 
 public sealed class WindowRule

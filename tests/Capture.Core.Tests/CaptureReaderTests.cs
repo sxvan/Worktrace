@@ -65,6 +65,35 @@ public sealed class CaptureReaderTests : IDisposable
     }
 
     [Fact]
+    public void Deleting_recent_captures_keeps_older_ones_and_events()
+    {
+        _database.InsertEvent(new ActivityEvent(T0.AddMinutes(9), EventType.Foreground, "Code.exe", "Program.cs"));
+        long kept = Capture(1, "a.png.enc");
+        long recent = Capture(10, "b.png.enc");
+        Capture(11, null, dedupeOf: recent);
+        Capture(12, null, dedupeOf: kept);
+
+        IReadOnlyList<string> files = _database.DeleteCapturesSince(T0.AddMinutes(10));
+
+        Assert.Equal([Path.Combine("captures", Day.ToString("yyyy-MM-dd"), "b.png.enc")], files);
+        using var reader = new CaptureReader(_dbPath);
+        Assert.Equal([kept], reader.ReadFocusedScreenshots(T0, T0.AddHours(1)).Select(s => s.WindowId));
+        Assert.Single(reader.ReadEvents(T0, T0.AddHours(1)));
+    }
+
+    [Fact]
+    public void Deleting_recent_events_keeps_older_ones()
+    {
+        _database.InsertEvent(new ActivityEvent(T0, EventType.Foreground, "Code.exe", "Program.cs"));
+        _database.InsertEvent(new ActivityEvent(T0.AddMinutes(10), EventType.IdleStart));
+
+        Assert.Equal(1, _database.DeleteEventsSince(T0.AddMinutes(10)));
+
+        using var reader = new CaptureReader(_dbPath);
+        Assert.Equal([EventType.Foreground], reader.ReadEvents(T0, T0.AddHours(1)).Select(e => e.Type));
+    }
+
+    [Fact]
     public void Events_and_screenshots_are_read_back()
     {
         _database.InsertEvent(new ActivityEvent(T0, EventType.Foreground, "Code.exe", "Program.cs"));

@@ -30,6 +30,13 @@ public sealed class CapturePipeline : IDisposable
     private readonly BlockingCollection<Job> _queue = new(MaxQueuedCaptures);
     private readonly Thread _thread;
 
+    // Held while a capture is processed and while recent captures are deleted, so a delete never
+    // races a capture that is half stored.
+    private readonly Lock _processing = new();
+
+    // Captures taken before this were deleted while they still sat in the queue: drop them.
+    private DateTimeOffset _discardBefore = DateTimeOffset.MinValue;
+
     public CapturePipeline(IImageStore imageStore, CaptureDatabase database, bool storeImages)
     {
         _storeImages = storeImages;
@@ -85,7 +92,17 @@ public sealed class CapturePipeline : IDisposable
             {
                 try
                 {
-                    Process(job);
+                    lock (_processing)
+                    {
+                        if (job.Decision.Timestamp < _discardBefore)
+                        {
+                            CaptureReporter.Discarded(job.Decision, "deleted by the user");
+                        }
+                        else
+                        {
+                            Process(job);
+                        }
+                    }
                 }
                 catch (Exception ex)
                 {
@@ -109,6 +126,42 @@ public sealed class CapturePipeline : IDisposable
         catch (ObjectDisposedException)
         {
             // Queue disposed during shutdown.
+        }
+    }
+
+    /// <summary>
+    /// Deletes everything captured from <paramref name="since"/> up to <paramref name="now"/>: the
+    /// database rows, their image files, and captures still waiting in the queue. With
+    /// <paramref name="includeEvents"/>, also the activity events of that span. Safe to call from
+    /// any thread. Returns the number of image files deleted.
+    /// </summary>
+    public int DeleteRecent(DateTimeOffset since, DateTimeOffset now, bool includeEvents)
+    {
+        lock (_processing)
+        {
+            _discardBefore = now;
+            IReadOnlyList<string> files = _database.DeleteCapturesSince(since);
+            // The remembered images may be among the deleted ones; a later duplicate must not point at them.
+            _deduplicator.Clear();
+            if (includeEvents)
+            {
+                _database.DeleteEventsSince(since);
+            }
+
+            int deleted = 0;
+            foreach (string path in files)
+            {
+                try
+                {
+                    _imageStore.Delete(path);
+                    deleted++;
+                }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+                {
+                    // Without its row the file is unreachable; retention removes the day folder eventually.
+                }
+            }
+            return deleted;
         }
     }
 
