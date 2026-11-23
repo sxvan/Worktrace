@@ -1,5 +1,24 @@
 # Changelog
 
+## [2.0.0](https://github.com/sxvan/Worktrace/compare/v1.0.0...v2.0.0) (2026-11-22)
+
+
+### ⚠ BREAKING CHANGES
+
+* databases of schema 6 are not migrated. The app refuses to open them; delete capture.db (and its -wal/-shm files). maxImageDimension is no longer read.
+
+### Features
+
+* add an app icon for TimeCapture ([db86019](https://github.com/sxvan/Worktrace/commit/db86019938402a806a17e4ccfb38235bbf2b4645))
+* add an app icon for TimeCapture ([c7d2602](https://github.com/sxvan/Worktrace/commit/c7d2602a5a4e55c6a8fea993f9fef18c58ecb4dc))
+* choose what "Delete last minutes" removes with a rule mode ([b362831](https://github.com/sxvan/Worktrace/commit/b362831e5916663a8f8fbaf1a1e8e37099edfdee))
+* delete the captures of the last few minutes from the tray menu ([7cc9c6c](https://github.com/sxvan/Worktrace/commit/7cc9c6ccbc84e60d456ae5fa9883fb01b541e5dd))
+
+
+### Code Refactoring
+
+* stop storing data nothing reads ([c42390f](https://github.com/sxvan/Worktrace/commit/c42390fc729a7d5e06c1bc8c2104b1876ff4d499))
+
 ## 1.0.0 (2026-11-22)
 
 
